@@ -6,15 +6,23 @@
 #include "ActionMenuItem.h"
 #include "SubMenu.h"
 #include "EditableValueMenuItem.h"
+#include "EditableFloatValueMenuItem.h" // Incluimos la nueva clase para valores flotantes
 #include <Arduino.h>
 
-// --- Variables globales externas ---
+// --- Declaraciones 'extern' ---
+// Le decimos a este archivo que estas variables y funciones existen en 'main.cpp'
 extern int targetTemp;
 extern int motorRPM;
+extern bool motorEnabled;
+extern double currentTemp;
+extern bool filamentStatus;
+extern float kp, ki, kd; // Variables PID
+
 extern void do_toggleMotor();
 extern void do_toggleHotend();
 extern void do_dummy_function();
 extern void do_saveSettings();
+extern void do_showInfoScreen();
 
 // --- Inicialización de variables estáticas ---
 volatile int UIModule::encoderDelta = 0;
@@ -27,18 +35,17 @@ void UIModule::encoder_isr() {
   uint8_t a = digitalRead(ENC_A_PIN);
   uint8_t b = digitalRead(ENC_B_PIN);
   lastState = (lastState << 2) | (a << 1) | b;
-  // Se debe usar el nombre de la clase para acceder a miembros estáticos
   UIModule::encoderDelta += table[lastState & 0x0F];
 }
 
 void UIModule::button_isr() {
-  // Se debe usar el nombre de la clase para acceder a miembros estáticos
   UIModule::buttonPressed = true;
 }
 
-// --- Implementación de la clase ---
-UIModule::UIModule() : u8g2(U8G2_R0, LCD_CLK_PIN, LCD_MOSI_PIN, LCD_CS_PIN) {
+// --- Implementación de los Métodos de la Clase ---
+UIModule::UIModule() : u8g2(U8G2_R0) {
     currentMenu = nullptr;
+    currentState = STATE_INFO_SCREEN;
 }
 
 void UIModule::init() {
@@ -46,40 +53,63 @@ void UIModule::init() {
   pinMode(ENC_B_PIN, INPUT_PULLUP);
   pinMode(ENC_BTN_PIN, INPUT_PULLUP);
 
-  // Al adjuntar la interrupción, se usa la función estática
   attachInterrupt(digitalPinToInterrupt(ENC_A_PIN), UIModule::encoder_isr, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_B_PIN), UIModule::encoder_isr, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_BTN_PIN), UIModule::button_isr, FALLING);
 
   u8g2.begin();
-  u8g2.setFont(u8g2_font_6x10_tf);
-
   buildMenu();
 }
 
+// ========================================================================
+// === buildMenu() con la NUEVA ESTRUCTURA ================================
+// ========================================================================
 void UIModule::buildMenu() {
-    static ActionMenuItem itemConfigVolver("<- Volver", do_dummy_function);
-    static EditableValueMenuItem itemConfigTemp("Temp. Target: ", &targetTemp, "C", 0, 260);
-    static EditableValueMenuItem itemConfigVel("Velocidad: ", &motorRPM, " RPM", 0, 120);
-    static ActionMenuItem itemConfigGuardar("Guardar Config", do_saveSettings);
+    // La palabra 'static' es crucial. Asegura que los objetos del menú
+    // se creen una sola vez y no se destruyan al salir de esta función.
 
-    static MenuItem* configItems[] = {&itemConfigVolver, &itemConfigTemp, &itemConfigVel, &itemConfigGuardar};
-    static SubMenu menuConfig("Configuracion", nullptr, configItems, 4);
+    // --- 1. Definir Submenú de Configuración PID (el más interno) ---
+    static ActionMenuItem itemPIDVolver("<- Volver", do_dummy_function);
+    static EditableFloatValueMenuItem itemPID_Kp("Kp: ", &kp, "", 0, 100, 0.5);
+    static EditableFloatValueMenuItem itemPID_Ki("Ki: ", &ki, "", 0, 100, 0.1);
+    static EditableFloatValueMenuItem itemPID_Kd("Kd: ", &kd, "", 0, 200, 1.0);
+    
+    static MenuItem* pidItems[] = {&itemPIDVolver, &itemPID_Kp, &itemPID_Ki, &itemPID_Kd};
+    static SubMenu menuConfigPID("Configuracion PID", nullptr, pidItems, 4);
 
+    // --- 2. Definir Menú Principal ---
+    static ActionMenuItem itemPrincipalInfo("<- Ver Info", do_showInfoScreen);
+    static EditableValueMenuItem itemPrincipalTemp("Temperatura: ", &targetTemp, " C", 0, 260);
+    static EditableValueMenuItem itemPrincipalVel("Velocidad: ", &motorRPM, " RPM", 0, 120);
+    // 'menuConfigPID' se añade aquí como un item más
     static ActionMenuItem itemPrincipalHotend("Encender Hotend", do_toggleHotend);
     static ActionMenuItem itemPrincipalMotor("Encender Motor", do_toggleMotor);
+    static ActionMenuItem itemPrincipalGuardar("Guardar Config", do_saveSettings);
 
-    static MenuItem* mainMenuItems[] = {&itemPrincipalHotend, &itemPrincipalMotor, &menuConfig};
-    static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 3);
+    static MenuItem* mainMenuItems[] = {
+        &itemPrincipalInfo,
+        &itemPrincipalTemp,
+        &itemPrincipalVel,
+        &menuConfigPID, // El submenú es un item dentro del menú principal
+        &itemPrincipalHotend,
+        &itemPrincipalMotor,
+        &itemPrincipalGuardar
+    };
 
+    static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 7);
+
+    // Asignamos el menú actual para empezar
     currentMenu = &menuPrincipal;
+
+    // Asignamos el padre al submenú para que sepa cómo volver
+    menuConfigPID.parent = &menuPrincipal;
 }
+// ========================================================================
 
 void UIModule::update() {
   noInterrupts();
-  // Aquí no se usa el prefijo porque estamos en una función normal (no estática)
   int d = encoderDelta / 4;
-  encoderDelta = 0; // Reseteamos a 0 para no acumular movimientos
+  encoderDelta = 0;
   bool clicked = buttonPressed;
   buttonPressed = false;
   interrupts();
@@ -89,11 +119,20 @@ void UIModule::update() {
   if (d < 0) input = INPUT_PREV;
   if (clicked) input = INPUT_SELECT;
 
-  if (input != INPUT_NONE && currentMenu != nullptr) {
-      MenuItem* nextMenu = currentMenu->handleInput(input);
-      if (nextMenu != nullptr) { // Simplificamos la lógica de navegación
-         currentMenu = nextMenu;
+  switch (currentState) {
+    case STATE_INFO_SCREEN:
+      if (input == INPUT_SELECT) {
+        currentState = STATE_MENU;
       }
+      break;
+    case STATE_MENU:
+      if (input != INPUT_NONE && currentMenu != nullptr) {
+          MenuItem* nextMenu = currentMenu->handleInput(input);
+          if (nextMenu != nullptr) {
+             currentMenu = nextMenu;
+          }
+      }
+      break;
   }
   
   draw();
@@ -102,8 +141,31 @@ void UIModule::update() {
 void UIModule::draw() {
     u8g2.firstPage();
     do {
-        if (currentMenu != nullptr) {
-            currentMenu->draw(u8g2, 0, 0, false);
-        }
+      switch (currentState) {
+        case STATE_INFO_SCREEN:
+          drawInfoScreen();
+          break;
+        case STATE_MENU:
+          if (currentMenu != nullptr) {
+              currentMenu->draw(u8g2, 0, 0, false);
+          }
+          break;
+      }
     } while (u8g2.nextPage());
+}
+
+void UIModule::drawInfoScreen() {
+    char buffer[32];
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.drawStr(0, 12, "Temperatura:");
+    snprintf(buffer, sizeof(buffer), "%.1f C / %d C", currentTemp, targetTemp);
+    u8g2.drawStr(0, 26, buffer);
+    u8g2.drawStr(0, 42, "Motor:");
+    const char* motorStateStr = motorEnabled ? "ON" : "OFF";
+    snprintf(buffer, sizeof(buffer), "%d RPM (%s)", motorRPM, motorStateStr);
+    u8g2.drawStr(0, 56, buffer);
+}
+
+void UIModule::showInfoScreen() {
+    currentState = STATE_INFO_SCREEN;
 }
