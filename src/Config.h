@@ -38,6 +38,7 @@
 // --- Pines Físicos ---
 #define TEMP_HEATER_PIN 10
 #define TEMP_THERMISTOR_PIN A15
+#define FILAMENT_SENSOR_PIN 11 // Pin para el sensor de fin de filamento
 
 // --------- Módulo de Extrusión ---------
 // Pines para el driver del motor (ej: A4988, DRV8825)
