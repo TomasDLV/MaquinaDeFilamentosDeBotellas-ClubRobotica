@@ -58,6 +58,23 @@ void UIModule::init() {
 
 // Construye la estructura del menú usando objetos estáticos y arreglos
 void UIModule::buildMenu() {
+    /*
+    VISTA MENU:
+    
+    <- Ver Info
+    Temperatura: * °
+    Encender Hotend
+    Velocidad: * RPM
+    Encender Motor
+    Configuracion PID  :
+        | <- Volver
+        | Kp:
+        | Ki:
+        | Kd:
+    Guardar en Memoria
+
+    
+    */
     static ActionMenuItem itemPIDVolver("<- Volver", do_dummy_function);
     static EditableFloatValueMenuItem itemPID_Kp("Kp: ", &kp, "", 0, 100, 0.5);
     static EditableFloatValueMenuItem itemPID_Ki("Ki: ", &ki, "", 0, 100, 0.1);
@@ -70,11 +87,13 @@ void UIModule::buildMenu() {
     static EditableValueMenuItem itemPrincipalVel("Velocidad: ", &motorRPM, " RPM", 0, 120);
     static ActionMenuItem itemPrincipalHotend("Encender Hotend", do_toggleHotend);
     static ActionMenuItem itemPrincipalMotor("Encender Motor", do_toggleMotor);
-    static ActionMenuItem itemPrincipalGuardar("Guardar Config", do_saveSettings);
-    static MenuItem* mainMenuItems[] = { &itemPrincipalInfo, &itemPrincipalTemp, &itemPrincipalVel, &menuConfigPID, &itemPrincipalHotend, &itemPrincipalMotor, &itemPrincipalGuardar };
-    static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 7);
+    static ActionMenuItem itemPrincipalGuardar("Guardar en Memoria", do_saveSettings);
+    static MenuItem* mainMenuItems[] = { &itemPrincipalInfo, &itemPrincipalTemp, &itemPrincipalVel/*, &menuConfigPID*/, &itemPrincipalHotend, &itemPrincipalMotor, &itemPrincipalGuardar };
+    static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 6);
 
     currentMenu = &menuPrincipal;
+    rootMenu = &menuPrincipal;
+
     menuConfigPID.parent = &menuPrincipal;
 }
 
@@ -166,6 +185,7 @@ void UIModule::update() {
       // Si estamos en la pantalla de info, un click nos lleva al menú
       if (input == INPUT_SELECT) {
         currentState = STATE_MENU;
+        currentMenu = rootMenu; // Resetea al menu principal
       }
       break;
     case STATE_MENU:
