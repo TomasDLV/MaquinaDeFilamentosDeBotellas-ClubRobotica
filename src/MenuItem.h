@@ -40,6 +40,9 @@ public:
 
     virtual MenuItem* handleInput(MenuInput input) = 0; // Esto establece que MenuItem es una clase abstracta. Las clases derivadas DEBEN implementar esta función.
     //Su trabajo es definir qué hacer cuando el usuario presiona un botón.
+
+    virtual bool isSubMenu() { return false; }// Por defecto, un item no es un submenú
+    virtual bool isEditing() { return false; }// Por defecto, un ítem nunca está en modo edición.
 };
 
 #endif

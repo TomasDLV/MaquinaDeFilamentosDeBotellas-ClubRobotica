@@ -11,11 +11,13 @@ private:
     const char* unit;
     float min_val, max_val;
     float step; // Cuánto aumenta/disminuye en cada giro del encoder
-    bool isEditing;
+    bool m_isEditing;
 
 public:
     EditableFloatValueMenuItem(const char* title, float* value_ptr, const char* unit, float min, float max, float step, MenuItem* parent = nullptr)
-        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), step(step), isEditing(false) {}
+        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), step(step), m_isEditing(false) {}
+    
+    virtual bool isEditing() override { return m_isEditing; }
 
     void draw(U8G2 &u8g2, int x, int y, bool selected) override {
         char buffer[32];
@@ -24,7 +26,7 @@ public:
         char float_str[10];
         dtostrf(*value_ptr, 4, 2, float_str); // Formato: 4 caracteres, 2 decimales
 
-        if (isEditing) {
+        if (m_isEditing) {
             snprintf(buffer, sizeof(buffer), "%s[%s]%s", title, float_str, unit);
         } else {
             snprintf(buffer, sizeof(buffer), "%s%s%s", title, float_str, unit);
@@ -42,17 +44,19 @@ public:
     }
 
     MenuItem* handleInput(MenuInput input) override {
-        if (!isEditing) {
-            if (input == INPUT_SELECT) isEditing = true;
+        if (!m_isEditing) {
+            if (input == INPUT_SELECT) m_isEditing = true;
         } else {
             if (input == INPUT_NEXT) *value_ptr += step;
             if (input == INPUT_PREV) *value_ptr -= step;
             *value_ptr = constrain(*value_ptr, min_val, max_val);
 
-            if (input == INPUT_SELECT || input == INPUT_BACK) isEditing = false;
+            if (input == INPUT_SELECT || input == INPUT_BACK) m_isEditing = false;
         }
         return this;
     }
+
+    
 };
 
 #endif

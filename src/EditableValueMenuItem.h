@@ -10,18 +10,19 @@ private:
     int* value_ptr;
     const char* unit;
     int min_val, max_val;
-    bool isEditing;
+    bool m_isEditing;
 
 public:
     EditableValueMenuItem(const char* title, int* value_ptr, const char* unit, int min, int max, MenuItem* parent = nullptr)
-        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), isEditing(false) {}
+        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), m_isEditing(false) {}
 
+    virtual bool isEditing() override { return m_isEditing; }
     // --- FUNCIÓN DE DIBUJADO CORREGIDA ---
     void draw(U8G2 &u8g2, int x, int y, bool selected) override {
         char buffer[32];
         
         // Primero, preparamos el texto que vamos a mostrar
-        if (isEditing) {
+        if (m_isEditing) {
             snprintf(buffer, sizeof(buffer), "%s[%d]%s", title, *value_ptr, unit);
         } else {
             snprintf(buffer, sizeof(buffer), "%s%d%s", title, *value_ptr, unit);
@@ -46,9 +47,9 @@ public:
     }
 
     MenuItem* handleInput(MenuInput input) override {
-        if (!isEditing) {
+        if (!m_isEditing) {
             if (input == INPUT_SELECT) {
-                isEditing = true;
+                m_isEditing = true;
                 return this; // Nos quedamos en este item para editar
             }
         } else {
@@ -58,13 +59,14 @@ public:
 
             // Si se presiona SELECT de nuevo, salimos del modo edición
             if (input == INPUT_SELECT || input == INPUT_BACK) {
-                isEditing = false;
+                m_isEditing = false;
                 // No retornamos 'parent' aquí para quedarnos en el menú actual,
                 // simplemente salimos del modo edición.
             }
         }
         return this; // El control siempre se queda aquí hasta que se navega fuera
     }
+    
 };
 
 #endif

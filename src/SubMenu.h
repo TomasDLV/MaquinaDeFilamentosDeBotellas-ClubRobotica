@@ -23,6 +23,8 @@ public:
         }
     }
 
+    virtual bool isSubMenu() override { return true; }
+
     void draw(U8G2 &u8g2, int, int, bool) override {
         u8g2.setFont(u8g2_font_6x10_tf);
         const int fontHeight = 12; // Altura de línea para nuestra fuente
@@ -38,30 +40,71 @@ public:
 
     MenuItem* handleInput(MenuInput input) override {
         const int maxItemsOnScreen = 5; // Asumimos 5 items visibles
+        if (itemCount == 0) { return this; } // Menú vacío, no hacer nada
 
-        if (input == INPUT_NEXT) {
-            selectedIndex = (selectedIndex + 1) % itemCount;
-            // Lógica de scrolling hacia abajo
-            if (selectedIndex > topItemIndex + maxItemsOnScreen - 1) {
-                topItemIndex = selectedIndex - maxItemsOnScreen + 1;
-            }
-            if (selectedIndex == 0) topItemIndex = 0; // Volver al inicio
-        } else if (input == INPUT_PREV) {
-            selectedIndex = (selectedIndex - 1 + itemCount) % itemCount;
-            // Lógica de scrolling hacia arriba
-            if (selectedIndex < topItemIndex) {
-                topItemIndex = selectedIndex;
-            }
-        } else if (input == INPUT_SELECT) {
-            // El primer ítem (índice 0) siempre es "Volver"
-            if (selectedIndex == 0 && parent != nullptr) {
-                return parent;
-            }
-            return items[selectedIndex]->handleInput(input);
-        } else if (input == INPUT_BACK) {
-            if (parent != nullptr) return parent;
+        // Obtenemos el ítem que está seleccionado actualmente
+        MenuItem* selectedItem = items[selectedIndex];
+
+        // --- INICIO DE LA NUEVA LÓGICA DE BLOQUEO ---
+        // 1. PRIMERO, preguntamos si el ítem actual está en modo edición
+        if (selectedItem->isEditing()) {
+            
+            // Si SÍ está editando, le pasamos TODOS los comandos (giro y clic)
+            // a ese ítem. El ítem se encargará de cambiar el valor o de salir
+            // del modo edición si se presiona SELECT.
+            selectedItem->handleInput(input);
+            
+            // No hacemos nada más. Retornamos 'this' para que la UI
+            // no cambie de menú. El selector NO se moverá.
+            return this;
         }
-        return this;
+        // --- FIN DE LA NUEVA LÓGICA DE BLOQUEO ---
+
+        // 2. Si NO está editando, procesamos la navegación normal
+        switch (input) {
+            case INPUT_NEXT:
+                selectedIndex = (selectedIndex + 1) % itemCount;
+                // Lógica de scrolling
+                if (selectedIndex == 0) topItemIndex = 0;
+                else if (selectedIndex >= topItemIndex + maxItemsOnScreen) {
+                    topItemIndex = selectedIndex - maxItemsOnScreen + 1;
+                }
+                break;
+
+            case INPUT_PREV:
+                selectedIndex = (selectedIndex - 1 + itemCount) % itemCount;
+                // Lógica de scrolling
+                if (selectedIndex < topItemIndex) {
+                    topItemIndex = selectedIndex;
+                }
+                break;
+
+            case INPUT_SELECT:
+                // El primer ítem (índice 0) siempre es "Volver"
+                if (selectedIndex == 0 && parent != nullptr) {
+                    return parent; // Volver al menú padre
+                }
+                
+                // Le pasamos el clic al ítem
+                selectedItem->handleInput(input);
+                
+                // Si el ítem es OTRO SubMenu, navegamos hacia él
+                if (selectedItem->isSubMenu()) {
+                    return selectedItem;
+                }
+                // Si no, era un ítem de Acción o Editable, nos quedamos aquí
+                break;
+
+            case INPUT_BACK:
+                if (parent != nullptr) return parent;
+                break;
+            
+            case INPUT_NONE:
+            default:
+                break; // No hacer nada
+        }
+        
+        return this; // Quedarse en este menú
     }
 };
 
