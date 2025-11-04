@@ -66,7 +66,7 @@ void do_showInfoScreen() {
 // Se ejecuta una sola vez al encender la máquina.
 void setup() {
   Serial.begin(115200);
-  Wire.begin(); // Importante: Inicia el bus I2C para la pantalla
+  //Wire.begin(); // Importante: Inicia el bus I2C para la pantalla
 
   // Llama al método de inicialización de cada módulo.
   tempController.init();

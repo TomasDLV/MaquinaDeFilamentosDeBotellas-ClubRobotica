@@ -4,15 +4,15 @@
 #define UI_MODULE_H
 
 #include <U8g2lib.h>
-#include <Wire.h> // Necesario para la pantalla SSD1306 (I2C)
+// #include <Wire.h> // No es necesario para SPI
 
-// Pre-declaración de la clase MenuItem para evitar errores de compilación
-class MenuItem; 
+// Pre-declaración de la clase MenuItem
+class MenuItem;
 
-// Enumeración para definir los posibles estados de la interfaz de usuario.
+// Enumeración para los estados de la UI
 enum UIState {
-    STATE_INFO_SCREEN, // Muestra la pantalla de estado
-    STATE_MENU         // Muestra el menú de navegación
+    STATE_INFO_SCREEN,
+    STATE_MENU
 };
 
 // --- Declaración de la Clase UIModule ---
@@ -21,29 +21,36 @@ public:
     UIModule(); // Constructor
     void init();   // Método de inicialización
     void update(); // Bucle principal de la UI
-    
-    // Método público para permitir que 'main.cpp' nos mande a la pantalla de info
-    void showInfoScreen(); 
+    void showInfoScreen(); // Cambia al estado de pantalla de información
 
-    // Funciones de interrupción (ISRs). Deben ser 'static'
-    static void encoder_isr();
-    static void button_isr();
+    // --- ELIMINADO: Ya no usamos ISRs ---
+    // static void encoder_isr();
+    // static void button_isr();
 
 private:
-    // Objeto de la librería U8g2 para la pantalla SSD1306 128x64 I2C
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+    // Objeto U8g2 para la pantalla ST7920 con SPI por software
+    U8G2_ST7920_128X64_F_SW_SPI u8g2;
 
-    MenuItem* currentMenu; // Puntero que apunta al menú que se está mostrando.
-    UIState currentState;  // Variable que guarda el estado actual de la UI.
+    MenuItem* currentMenu; // Puntero al menú activo
+    UIState currentState;  // Estado actual de la UI
 
-    // Variables estáticas y volátiles para las interrupciones
-    volatile static int encoderDelta;
-    volatile static bool buttonPressed;
+    // --- Variables para Polling (no bloqueante) ---
+    int8_t lastEncoderState; // Guarda el estado combinado anterior de los pines A y B
 
-    // Métodos privados (solo usados por esta clase)
+    // --- Variables CORREGIDAS para Debounce del Botón ---
+    int lastReadingState;       // Guarda la lectura del pin en el ciclo ANTERIOR
+    int buttonState;            // Guarda el estado ESTABLE y DEBOUNCED actual (HIGH o LOW)
+    unsigned long lastDebounceTime; // Guarda el tiempo del último cambio detectado
+    static const unsigned long debounceDelay = 7; // Tiempo (ms) para estabilizar
+
+    // Métodos privados
     void buildMenu();      // Construye la estructura del menú
     void draw();           // Dibuja la pantalla actual
     void drawInfoScreen(); // Dibuja la pantalla de información
+
+    // Funciones privadas para leer las entradas por polling
+    int readEncoder();     // Lee el giro del encoder
+    bool readButton();     // Lee la pulsación del botón (con debounce)
 };
 
-#endif
+#endif // UI_MODULE_H
