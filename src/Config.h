@@ -45,5 +45,12 @@
 #define MOTOR_STEP_PIN   26
 #define MOTOR_DIR_PIN    28
 #define MOTOR_MAX_SPEED 1000
+// CHEQUEAR CUAL CORRESPONDE
+// #define MOTOR_ENABLE_PIN 54 // Pin Enable E0
+// #define MOTOR_STEP_PIN   55 // Pin Step E0
+// #define MOTOR_DIR_PIN    56 // Pin Dir E0
+// #define MOTOR_STEPS_PER_REV 200
+// #define MOTOR_MAX_SPEED 1000
+// #define MOTOR_ACCELERATION 500
 
 #endif

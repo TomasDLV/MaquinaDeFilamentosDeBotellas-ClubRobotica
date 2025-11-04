@@ -17,6 +17,9 @@ extern bool motorEnabled;
 extern double currentTemp;
 extern bool filamentStatus;
 extern float kp, ki, kd;
+// Variables 'extern' para leer los datos de la IS
+extern volatile int g_encoderDelta;
+extern volatile bool g_buttonClicked;
 
 extern void do_toggleMotor();
 extern void do_toggleHotend();
@@ -96,103 +99,104 @@ void UIModule::buildMenu() {
 
     menuConfigPID.parent = &menuPrincipal;
 }
+// --------------------------------------------------------------------------------------- ELIMINADO ---------------------------------------------------
+// // --- Lectura del Encoder por Polling (Robusta) ---
+// int UIModule::readEncoder() {
+//   static const int8_t lookup_table[] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+//   uint8_t a = digitalRead(ENC_A_PIN);
+//   uint8_t b = digitalRead(ENC_B_PIN);
+//   uint8_t currentState = (a << 1) | b; // Estado actual como 0bAB (0, 1, 2, o 3)
+//   uint8_t index = (lastEncoderState << 2) | currentState; // Índice combinado (0-15)
+//   lastEncoderState = currentState; // Actualiza para la próxima vez
 
-// --- Lectura del Encoder por Polling (Robusta) ---
-int UIModule::readEncoder() {
-  static const int8_t lookup_table[] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-  uint8_t a = digitalRead(ENC_A_PIN);
-  uint8_t b = digitalRead(ENC_B_PIN);
-  uint8_t currentState = (a << 1) | b; // Estado actual como 0bAB (0, 1, 2, o 3)
-  uint8_t index = (lastEncoderState << 2) | currentState; // Índice combinado (0-15)
-  lastEncoderState = currentState; // Actualiza para la próxima vez
+//   // Acumulador para contar micro-pasos hasta un "click" completo
+//   static int encoderAccumulator = 0;
+//   encoderAccumulator += lookup_table[index];
 
-  // Acumulador para contar micro-pasos hasta un "click" completo
-  static int encoderAccumulator = 0;
-  encoderAccumulator += lookup_table[index];
+//   int delta = 0;
+//   // Si acumulamos 2 micro-pasos, es un click horario
+//   if (encoderAccumulator >= 2) {
+//       delta = 1;
+//       encoderAccumulator = 0;
+//   // Si acumulamos -2 micro-pasos, es un click antihorario
+//   } else if (encoderAccumulator <= -2) {
+//       delta = -1;
+//       encoderAccumulator = 0;
+//   }
+//   return delta;
+// }
 
-  int delta = 0;
-  // Si acumulamos 2 micro-pasos, es un click horario
-  if (encoderAccumulator >= 2) {
-      delta = 1;
-      encoderAccumulator = 0;
-  // Si acumulamos -2 micro-pasos, es un click antihorario
-  } else if (encoderAccumulator <= -2) {
-      delta = -1;
-      encoderAccumulator = 0;
-  }
-  return delta;
-}
+// // --- Lectura del Botón por Polling con Debounce ---
+// // --- FUNCIÓN readButton() CON LÓGICA DEBOUNCE ESTÁNDAR ---
+// bool UIModule::readButton() {
+//   bool triggered = false; // Indica si se detectó una pulsación VÁLIDA en este ciclo
 
-// --- Lectura del Botón por Polling con Debounce ---
-// --- FUNCIÓN readButton() CON LÓGICA DEBOUNCE ESTÁNDAR ---
-bool UIModule::readButton() {
-  bool triggered = false; // Indica si se detectó una pulsación VÁLIDA en este ciclo
+//   // 1. Lee el estado actual del pin
+//   int currentReading = digitalRead(ENC_BTN_PIN);
 
-  // 1. Lee el estado actual del pin
-  int currentReading = digitalRead(ENC_BTN_PIN);
+//   // 2. Comprueba si la lectura actual es DIFERENTE a la lectura del ciclo ANTERIOR
+//   //    Si es diferente, significa que el estado del pin está cambiando (puede ser ruido o una pulsación real)
+//   if (currentReading != lastReadingState) {
+//     // Resetea el temporizador de debounce CADA VEZ que detecta un cambio
+//     lastDebounceTime = millis();
+//     // Descomenta para depurar:
+//     // Serial.print("Button changing... Reading: "); Serial.println(currentReading);
+//   }
 
-  // 2. Comprueba si la lectura actual es DIFERENTE a la lectura del ciclo ANTERIOR
-  //    Si es diferente, significa que el estado del pin está cambiando (puede ser ruido o una pulsación real)
-  if (currentReading != lastReadingState) {
-    // Resetea el temporizador de debounce CADA VEZ que detecta un cambio
-    lastDebounceTime = millis();
-    // Descomenta para depurar:
-    // Serial.print("Button changing... Reading: "); Serial.println(currentReading);
-  }
+//   // 3. Comprueba si ha pasado suficiente tiempo desde el ÚLTIMO cambio detectado
+//   if ((millis() - lastDebounceTime) > debounceDelay) {
+//     // Si el tiempo ha pasado, significa que la lectura actual se ha mantenido ESTABLE
+//     // Ahora, comprobamos si este estado estable es DIFERENTE al último estado ESTABLE que registramos
+//     if (currentReading != buttonState) {
+//       // Si es diferente, actualizamos el estado estable
+//       buttonState = currentReading;
+//       // Descomenta para depurar:
+//       // Serial.print("Button stable state changed to: "); Serial.println(buttonState);
 
-  // 3. Comprueba si ha pasado suficiente tiempo desde el ÚLTIMO cambio detectado
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    // Si el tiempo ha pasado, significa que la lectura actual se ha mantenido ESTABLE
-    // Ahora, comprobamos si este estado estable es DIFERENTE al último estado ESTABLE que registramos
-    if (currentReading != buttonState) {
-      // Si es diferente, actualizamos el estado estable
-      buttonState = currentReading;
-      // Descomenta para depurar:
-      // Serial.print("Button stable state changed to: "); Serial.println(buttonState);
+//       // Si el NUEVO estado estable es PRESIONADO (LOW)
+//       if (buttonState == LOW) {
+//         triggered = true; // ¡Registramos la pulsación válida!
+//         // Descomenta para depurar:
+//         // Serial.println("---> Button Press Triggered <---");
+//       }
+//     }
+//   }
 
-      // Si el NUEVO estado estable es PRESIONADO (LOW)
-      if (buttonState == LOW) {
-        triggered = true; // ¡Registramos la pulsación válida!
-        // Descomenta para depurar:
-        // Serial.println("---> Button Press Triggered <---");
-      }
-    }
-  }
+//   // 4. Guarda la lectura actual para compararla en el próximo ciclo
+//   lastReadingState = currentReading;
 
-  // 4. Guarda la lectura actual para compararla en el próximo ciclo
-  lastReadingState = currentReading;
-
-  // 5. Devuelve si se detectó una pulsación válida en este ciclo
-  return triggered;
-}
+//   // 5. Devuelve si se detectó una pulsación válida en este ciclo
+//   return triggered;
+// }
+// -----------------------------------------------------------------------------------------------------------------------------
 
 // Bucle principal de la UI: Lee entradas, actualiza estado y dibuja
 void UIModule::update() {
-  // Lee las entradas usando las funciones de polling
-  int d = readEncoder();
-  bool clicked = readButton();
-  Serial.print("Boton Presionado: ");
-  Serial.println(clicked);
-  // Convierte las lecturas en eventos de menú
+  // 1. Lee los valores de las variables globales que la ISR actualiza
+  noInterrupts(); // Desactiva interrupciones brevemente para leer
+  int d = g_encoderDelta;
+  g_encoderDelta = 0; // Resetea el delta
+  bool clicked = g_buttonClicked;
+  g_buttonClicked = false; // Resetea el click
+  interrupts(); // Reactiva interrupciones
+
+  // 2. Convierte los deltas en eventos de menú
   MenuInput input = INPUT_NONE;
   if (d > 0) input = INPUT_NEXT;
   if (d < 0) input = INPUT_PREV;
   if (clicked) input = INPUT_SELECT;
 
-  // Actualiza la máquina de estados de la UI
+  // 3. La máquina de estados procesa los eventos
   switch (currentState) {
     case STATE_INFO_SCREEN:
-      // Si estamos en la pantalla de info, un click nos lleva al menú
       if (input == INPUT_SELECT) {
         currentState = STATE_MENU;
-        currentMenu = rootMenu; // Resetea al menu principal
+        currentMenu = rootMenu; // Resetea al menú principal
       }
       break;
     case STATE_MENU:
-      // Si estamos en el menú, procesamos la navegación
       if (input != INPUT_NONE && currentMenu != nullptr) {
           MenuItem* nextMenu = currentMenu->handleInput(input);
-          // Actualizamos el menú actual si la acción resultó en un cambio
           if (nextMenu != nullptr) {
              currentMenu = nextMenu;
           }
@@ -200,7 +204,7 @@ void UIModule::update() {
       break;
   }
   
-  // Redibuja la pantalla al final de cada ciclo
+  // 4. Se redibuja la pantalla (esta es la parte lenta del loop)
   draw();
 }
 
