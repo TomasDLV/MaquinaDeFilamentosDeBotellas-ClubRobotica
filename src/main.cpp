@@ -15,7 +15,7 @@ ExtrusionModule extruder;
 // Estas son las variables que el menú modificará directamente.
 int targetTemp = 0;
 int motorRPM = 60;
-bool hotendEnabled = false;
+bool hotendEnabled = false; // ¿Está el calentador encendido?
 bool motorEnabled = false;
 double currentTemp = 0.0;
 bool filamentStatus = true; // Placeholder para el futuro sensor
@@ -133,15 +133,18 @@ void setup() {
 // === Arduino Loop ===
 // Este bucle se ejecuta continuamente, lo más rápido posible.
 void loop() {
-  // --- Sincronización de Datos ---
-  // Se asegura de que los módulos siempre tengan los valores más recientes.
-  currentTemp = tempController.getTemp();
-  extruder.setSpeed(motorRPM);
-  tempController.setTunings(kp, ki, kd); // Actualiza las constantes del PID en tiempo real
+  // Primero, actualizamos tunings del PID si han cambiado desde el menú
+  tempController.setTunings(kp, ki, kd);
 
-  // --- Actualización de Módulos ---
-  // Llama al método update() de cada módulo. Es un bucle no bloqueante.
+  // Luego, actualizamos el módulo de temperatura (esto mide y guarda currentTemp)
   tempController.update();
+
+  // Ahora sí, leemos la última temperatura estable ya calculada por el módulo. Es importante que update esté antes para que lea la temperatura actualizada.
+  currentTemp = tempController.getCurrentTemp(); // Actualiza la variable global para la UI
+
+  // Llama al método update() de cada módulo. Es un bucle no bloqueante.
+  extruder.setSpeed(motorRPM);
   extruder.update();
   ui.update();
+
 }

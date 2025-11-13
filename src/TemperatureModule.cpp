@@ -12,6 +12,8 @@ TemperatureModule::TemperatureModule() :
   kp = TEMP_KP;
   ki = TEMP_KI;
   kd = TEMP_KD;
+
+  currentTemp = 0.0;
 }
 
 void TemperatureModule::init() {
@@ -60,16 +62,23 @@ double TemperatureModule::getTemp() {
 }
 
 void TemperatureModule::update() {
-  // Si el objetivo es 0 o menos, mantenemos el calentador apagado
+  // SIEMPRE medimos y guardamos la temperatura actual para la UI
+  currentTemp = getTemp(); // esta currentTemp es local al módulo de temperatura
+
+  // Si el objetivo es 0 o menos, mostramos la temp pero mantenemos el calentador apagado
   if (pidSetpoint <= 0) {
-    analogWrite(TEMP_HEATER_PIN, 0);
-    return;
+    analogWrite(TEMP_HEATER_PIN, 0); // Calentador apagado
+    return; // No corremos el PID, pero currentTemp ya quedó actualizado
   }
-  
-  pidInput = getTemp();      // 1. Leemos la temperatura actual
-  myPID.Compute();           // 2. La librería decide si es hora de calcular y lo hace
-  analogWrite(TEMP_HEATER_PIN, (int)pidOutput); // 3. Aplicamos la salida PWM
+
+  // Alimentamos el PID con la última lectura estable
+  pidInput = currentTemp;
+
+  // Calculamos y aplicamos el control
+  myPID.Compute(); // La librería decide si es hora de calcular y lo hace
+  analogWrite(TEMP_HEATER_PIN, (int)pidOutput); //Aplicamos la salida PWM
 }
+
 
 // Función para ajustar las constantes del PID "en caliente"
 void TemperatureModule::setTunings(double Kp, double Ki, double Kd) {

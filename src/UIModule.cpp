@@ -232,7 +232,8 @@ void UIModule::drawInfoScreen() {
 
     // Muestra Temperatura Actual / Objetivo
     u8g2.drawStr(0, 12, "Temperatura:");
-    snprintf(buffer, sizeof(buffer), "%.1f C / %d C", currentTemp, targetTemp);
+    int tempInt = (int)round(currentTemp);
+    snprintf(buffer, sizeof(buffer), "%d C / %d C", tempInt, targetTemp);
     u8g2.drawStr(0, 26, buffer);
 
     // Muestra Velocidad y Estado del Motor
