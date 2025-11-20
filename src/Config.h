@@ -52,4 +52,13 @@
 // Límite de seguridad en mm/s (ej. 15 mm/s es bastante rápido para PET)
 #define MAX_EXTRUSION_SPEED_MMS 15.0
 
+
+
+// --- MAPA DE MEMORIA EEPROM ---
+#define EEPROM_ADDR_SPEED       0   // Float (Ocupa 4 bytes) -> Rango 0-3
+#define EEPROM_ADDR_TARGET_TEMP 10  // Int (Ocupa 2 bytes)   -> Rango 10-11
+#define EEPROM_ADDR_KP          20  // Double (4 bytes)      -> Rango 20-23
+#define EEPROM_ADDR_KI          30  // Double
+#define EEPROM_ADDR_KD          40  // Double
+
 #endif

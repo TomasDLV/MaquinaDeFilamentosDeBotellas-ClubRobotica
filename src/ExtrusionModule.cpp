@@ -26,7 +26,7 @@ void ExtrusionModule::init() {
 
 void ExtrusionModule::loadSpeedFromEEPROM() {
   float storedVal; // Leemos como float
-  EEPROM.get(eepromAddr, storedVal);
+  EEPROM.get(EEPROM_ADDR_SPEED, storedVal);
 
   // Validación: Si es NaN (basura) o negativo o muy alto, ponemos un valor seguro
   if (isnan(storedVal) || storedVal < 0 || storedVal > MAX_EXTRUSION_SPEED_MMS) {
@@ -38,10 +38,8 @@ void ExtrusionModule::loadSpeedFromEEPROM() {
 }
 
 void ExtrusionModule::saveSpeedToEEPROM() {
-  // Guardamos el valor actual de la velocidad en la EEPROM
-  EEPROM.put(eepromAddr, currentSpeed);
+  EEPROM.put(EEPROM_ADDR_SPEED, currentSpeed); // <--- Usar Macro
 }
-
 void ExtrusionModule::setSpeed(float newSpeed) {
   // Actualiza la velocidad en la variable y en el motor
   // 1. Limitamos el rango (seguridad)

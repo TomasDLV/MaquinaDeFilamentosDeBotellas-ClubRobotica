@@ -27,9 +27,14 @@ class TemperatureModule {
     int getTargetTemp();
     double getTemp(); // Se usa 'double' para mayor precisión
     void update();
+    double getKp() { return kp; }
+    double getKi() { return ki; }
+    double getKd() { return kd; }
     double getCurrentTemp() const { return currentTemp; }
     // Función para poder ajustar el PID desde el menú en el futuro
     void setTunings(double Kp, double Ki, double Kd);
+    void saveSettingsToEEPROM();
+    void loadSettingsFromEEPROM();
 };
 
 #endif

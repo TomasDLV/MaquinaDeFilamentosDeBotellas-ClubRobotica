@@ -9,7 +9,7 @@ class ExtrusionModule {
   private:
     AccelStepper stepper;
     float currentSpeed; // Velocidad actual en pasos/segundo
-    const int eepromAddr = 0; // Dirección en la EEPROM donde guardaremos la velocidad
+    
 
   public:
     ExtrusionModule();

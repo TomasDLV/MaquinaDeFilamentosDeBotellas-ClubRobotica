@@ -56,9 +56,18 @@ void do_dummy_function() {}
 
 // Guarda la configuración actual en la memoria no volátil
 void do_saveSettings() {
+  // 1. Asegurarnos que los módulos tengan los valores más recientes del menú
+  // (Aunque el loop lo hace constantemente, es bueno asegurar antes de guardar)
+  extruder.setSpeed(motorSpeed);
+  tempController.setTargetTemp(targetTemp);
+  tempController.setTunings(kp, ki, kd);
+
+  // 2. Ordenar a los módulos que escriban en la memoria
   extruder.saveSpeedToEEPROM();
-  // En el futuro, aquí se podría añadir:
-  // tempController.saveTuningsToEEPROM(kp, ki, kd);
+  tempController.saveSettingsToEEPROM();
+
+  // Opcional: Feedback visual (puedes hacer un pequeño parpadeo o mensaje en pantalla si quieres)
+  Serial.println("Configuracion guardada en EEPROM.");
 }
 
 // Le dice al módulo de UI que vuelva a la pantalla de información
@@ -119,12 +128,25 @@ void setup() {
   Serial.begin(115200);
   //Wire.begin(); // Importante: Inicia el bus I2C para la pantalla
 
-  // Llama al método de inicialización de cada módulo.
+  // 1. Iniciar Módulos
   tempController.init();
   extruder.init();
   ui.init(); 
-  // Sincronizamos
+
+  // 2. CARGAR DATOS DE EEPROM A LOS MÓDULOS
+  tempController.loadSettingsFromEEPROM();
+  extruder.loadSpeedFromEEPROM();
+
+  // 3. SINCRONIZAR VARIABLES GLOBALES (MENU) CON LO CARGADO
+  // El módulo ya tiene los datos guardados, ahora actualizamos las variables
+  // que usa el menú para mostrarlos.
   motorSpeed = extruder.getSpeed();
+  targetTemp = tempController.getTargetTemp();
+  
+  // También recuperamos el PID guardado para que el menú lo muestre
+  kp = tempController.getKp();
+  ki = tempController.getKi();
+  kd = tempController.getKd();
 
   Timer1.initialize(1000); // 1000us = 1ms
   Timer1.attachInterrupt(poll_inputs_isr); // Asocia la ISR
