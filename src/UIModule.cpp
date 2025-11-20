@@ -12,8 +12,9 @@
 // --- Declaraciones 'extern' ---
 // Le decimos al compilador que estas variables y funciones globales existen en main.cpp
 extern int targetTemp;
-extern int motorRPM;
+extern float motorSpeed;
 extern bool motorEnabled;
+extern bool hotendEnabled;
 extern double currentTemp;
 extern bool filamentStatus;
 extern float kp, ki, kd;
@@ -87,9 +88,9 @@ void UIModule::buildMenu() {
 
     static ActionMenuItem itemPrincipalInfo("<- Ver Info", do_showInfoScreen);
     static EditableValueMenuItem itemPrincipalTemp("Temperatura: ", &targetTemp, " C", 0, 260);
-    static EditableValueMenuItem itemPrincipalVel("Velocidad: ", &motorRPM, " RPM", 0, 120);
-    static ActionMenuItem itemPrincipalHotend("Encender Hotend", do_toggleHotend);
-    static ActionMenuItem itemPrincipalMotor("Encender Motor", do_toggleMotor);
+    static EditableFloatValueMenuItem itemPrincipalVel("Velocidad: ", &motorSpeed, " mm/s", 0.0, 15.0 , 0.1);
+    static ActionMenuItem itemPrincipalHotend(&hotendEnabled,"Encender Hotend"," Apagar  Hotend", do_toggleHotend);
+    static ActionMenuItem itemPrincipalMotor(&motorEnabled,"Encender Motor"," Apagar  Motor", do_toggleMotor);
     static ActionMenuItem itemPrincipalGuardar("Guardar en Memoria", do_saveSettings);
     static MenuItem* mainMenuItems[] = { &itemPrincipalInfo, &itemPrincipalTemp, &itemPrincipalVel/*, &menuConfigPID*/, &itemPrincipalHotend, &itemPrincipalMotor, &itemPrincipalGuardar };
     static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 6);
@@ -99,76 +100,6 @@ void UIModule::buildMenu() {
 
     menuConfigPID.parent = &menuPrincipal;
 }
-// --------------------------------------------------------------------------------------- ELIMINADO ---------------------------------------------------
-// // --- Lectura del Encoder por Polling (Robusta) ---
-// int UIModule::readEncoder() {
-//   static const int8_t lookup_table[] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-//   uint8_t a = digitalRead(ENC_A_PIN);
-//   uint8_t b = digitalRead(ENC_B_PIN);
-//   uint8_t currentState = (a << 1) | b; // Estado actual como 0bAB (0, 1, 2, o 3)
-//   uint8_t index = (lastEncoderState << 2) | currentState; // Índice combinado (0-15)
-//   lastEncoderState = currentState; // Actualiza para la próxima vez
-
-//   // Acumulador para contar micro-pasos hasta un "click" completo
-//   static int encoderAccumulator = 0;
-//   encoderAccumulator += lookup_table[index];
-
-//   int delta = 0;
-//   // Si acumulamos 2 micro-pasos, es un click horario
-//   if (encoderAccumulator >= 2) {
-//       delta = 1;
-//       encoderAccumulator = 0;
-//   // Si acumulamos -2 micro-pasos, es un click antihorario
-//   } else if (encoderAccumulator <= -2) {
-//       delta = -1;
-//       encoderAccumulator = 0;
-//   }
-//   return delta;
-// }
-
-// // --- Lectura del Botón por Polling con Debounce ---
-// // --- FUNCIÓN readButton() CON LÓGICA DEBOUNCE ESTÁNDAR ---
-// bool UIModule::readButton() {
-//   bool triggered = false; // Indica si se detectó una pulsación VÁLIDA en este ciclo
-
-//   // 1. Lee el estado actual del pin
-//   int currentReading = digitalRead(ENC_BTN_PIN);
-
-//   // 2. Comprueba si la lectura actual es DIFERENTE a la lectura del ciclo ANTERIOR
-//   //    Si es diferente, significa que el estado del pin está cambiando (puede ser ruido o una pulsación real)
-//   if (currentReading != lastReadingState) {
-//     // Resetea el temporizador de debounce CADA VEZ que detecta un cambio
-//     lastDebounceTime = millis();
-//     // Descomenta para depurar:
-//     // Serial.print("Button changing... Reading: "); Serial.println(currentReading);
-//   }
-
-//   // 3. Comprueba si ha pasado suficiente tiempo desde el ÚLTIMO cambio detectado
-//   if ((millis() - lastDebounceTime) > debounceDelay) {
-//     // Si el tiempo ha pasado, significa que la lectura actual se ha mantenido ESTABLE
-//     // Ahora, comprobamos si este estado estable es DIFERENTE al último estado ESTABLE que registramos
-//     if (currentReading != buttonState) {
-//       // Si es diferente, actualizamos el estado estable
-//       buttonState = currentReading;
-//       // Descomenta para depurar:
-//       // Serial.print("Button stable state changed to: "); Serial.println(buttonState);
-
-//       // Si el NUEVO estado estable es PRESIONADO (LOW)
-//       if (buttonState == LOW) {
-//         triggered = true; // ¡Registramos la pulsación válida!
-//         // Descomenta para depurar:
-//         // Serial.println("---> Button Press Triggered <---");
-//       }
-//     }
-//   }
-
-//   // 4. Guarda la lectura actual para compararla en el próximo ciclo
-//   lastReadingState = currentReading;
-
-//   // 5. Devuelve si se detectó una pulsación válida en este ciclo
-//   return triggered;
-// }
-// -----------------------------------------------------------------------------------------------------------------------------
 
 // Bucle principal de la UI: Lee entradas, actualiza estado y dibuja
 void UIModule::update() {
@@ -179,6 +110,7 @@ void UIModule::update() {
   bool clicked = g_buttonClicked;
   g_buttonClicked = false; // Resetea el click
   interrupts(); // Reactiva interrupciones
+  
 
   // 2. Convierte los deltas en eventos de menú
   MenuInput input = INPUT_NONE;
@@ -228,23 +160,78 @@ void UIModule::draw() {
 // Dibuja la pantalla de información con los datos actuales
 void UIModule::drawInfoScreen() {
     char buffer[32];
-    u8g2.setFont(u8g2_font_ncenB10_tr); // Fuente grande para info principal
+    int screenWidth = u8g2.getDisplayWidth();
+    
+    // ============================================
+    // SECCIÓN SUPERIOR: TEMPERATURA (Dashboard)
+    // ============================================
+    
+    // 1. Título pequeño
+    u8g2.setFont(u8g2_font_profont12_tf); // Fuente pequeña y limpia
+    u8g2.drawStr(0, 10, "HOTEND");
 
-    // Muestra Temperatura Actual / Objetivo
-    u8g2.drawStr(0, 12, "Temperatura:");
+    // 2. Temperatura Actual (EN GRANDE)
+    u8g2.setFont(u8g2_font_helvB18_tr); // Fuente Helvetica Negrita Grande
     int tempInt = (int)round(currentTemp);
-    snprintf(buffer, sizeof(buffer), "%d C / %d C", tempInt, targetTemp);
-    u8g2.drawStr(0, 26, buffer);
+    snprintf(buffer, sizeof(buffer), "%d", tempInt);
+    
+    // Calculamos ancho para alinear a la derecha o dejarlo fijo
+    u8g2.drawStr(0, 35, buffer); 
+    
+    // Dibujamos el símbolo de grados pequeño al lado
+    int tempWidth = u8g2.getStrWidth(buffer);
+    u8g2.setFont(u8g2_font_profont12_tf);
+    u8g2.drawStr(tempWidth + 2, 28, "o"); // Simula el símbolo de grados
 
-    // Muestra Velocidad y Estado del Motor
-    u8g2.drawStr(0, 42, "Motor:");
-    const char* motorStateStr = motorEnabled ? "ON" : "OFF";
-    snprintf(buffer, sizeof(buffer), "%d RPM (%s)", motorRPM, motorStateStr);
-    u8g2.drawStr(0, 56, buffer);
+    // 3. Temperatura Objetivo (Texto pequeño "/ 200")
+    u8g2.setFont(u8g2_font_profont12_tf);
+    snprintf(buffer, sizeof(buffer), "/ %d C", targetTemp);
+    // Lo alineamos a la derecha de la pantalla
+    int targetWidth = u8g2.getStrWidth(buffer);
+    u8g2.drawStr(screenWidth - targetWidth, 35, buffer);
 
-    // Placeholder para Sensor de Filamento
-    // const char* filamentStateStr = filamentStatus ? "OK" : "NO";
-    // u8g2.drawStr(100, 56, filamentStateStr);
+    // 4. Barra de Progreso de Temperatura
+    // Dibuja un marco
+    u8g2.drawFrame(0, 40, screenWidth, 6); 
+    if (targetTemp > 0) {
+        // Calcula el ancho de la barra (mapeo simple)
+        int barWidth = map(constrain(tempInt, 0, targetTemp), 0, targetTemp, 0, screenWidth - 2);
+        // Dibuja el relleno
+        u8g2.drawBox(1, 41, barWidth, 4);
+    }
+
+    // ============================================
+    // SECCIÓN INFERIOR: MOTOR / EXTRUSIÓN
+    // ============================================
+    
+    int yMotorBase = 62; // Base de la línea de texto inferior
+
+    // 1. Estado del Motor (Caja visual)
+    u8g2.setFont(u8g2_font_profont12_tf); // Volvemos a fuente normal
+    
+    if (motorEnabled) {
+        // Si está ENCENDIDO: Caja negra con texto blanco (Invertido)
+        u8g2.setDrawColor(1);
+        u8g2.drawBox(0, yMotorBase - 11, 32, 13); // Caja de fondo
+        u8g2.setDrawColor(0); // Texto transparente (color fondo)
+        u8g2.drawStr(4, yMotorBase, "RUN");
+        u8g2.setDrawColor(1); // Restaurar color normal
+    } else {
+        // Si está APAGADO: Caja vacía (Marco) con texto normal
+        u8g2.drawFrame(0, yMotorBase - 11, 32, 13);
+        u8g2.drawStr(2, yMotorBase, "STOP");
+    }
+
+    // 2. Velocidad (Alineada a la derecha)
+    // Convertimos el float a texto
+    char speedStr[10];
+    dtostrf(motorSpeed, 4, 1, speedStr); // ej: " 2.5"
+    snprintf(buffer, sizeof(buffer), "%s mm/s", speedStr);
+    
+    // Usamos una fuente negrita media para el número
+    u8g2.setFont(u8g2_font_6x12_tr); 
+    int speedWidth = u8g2.getStrWidth(buffer);
+    u8g2.drawStr(screenWidth - speedWidth, yMotorBase, buffer);
 }
 
 // Función pública para cambiar al estado de pantalla de información

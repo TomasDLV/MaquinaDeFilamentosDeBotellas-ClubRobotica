@@ -12,7 +12,7 @@ ExtrusionModule::ExtrusionModule() :
 
 void ExtrusionModule::init() {
   pinMode(MOTOR_ENABLE_PIN, OUTPUT);
-  digitalWrite(MOTOR_ENABLE_PIN, HIGH);
+  digitalWrite(MOTOR_ENABLE_PIN, HIGH); //Inicia apagado
 
   stepper.setMaxSpeed(MOTOR_MAX_SPEED);
   
@@ -25,14 +25,15 @@ void ExtrusionModule::init() {
 }
 
 void ExtrusionModule::loadSpeedFromEEPROM() {
-  float storedSpeed;
-  EEPROM.get(eepromAddr, storedSpeed);
+  float storedVal; // Leemos como float
+  EEPROM.get(eepromAddr, storedVal);
 
-  // Verificamos que el valor leído sea lógico. Si no, usamos un valor por defecto.
-  if (isnan(storedSpeed) || storedSpeed < 0 || storedSpeed > MOTOR_MAX_SPEED) {
-    currentSpeed = 200.0; // Velocidad por defecto si la EEPROM está vacía o corrupta
+  // Validación: Si es NaN (basura) o negativo o muy alto, ponemos un valor seguro
+  if (isnan(storedVal) || storedVal < 0 || storedVal > MAX_EXTRUSION_SPEED_MMS) {
+    currentSpeed = 2.0; // Velocidad segura por defecto (2 mm/s)
+    // Nota: Para PET, el inicio suele ser lento (entre 1.5 y 3 mm/s)
   } else {
-    currentSpeed = storedSpeed;
+    currentSpeed = storedVal;
   }
 }
 
@@ -43,8 +44,15 @@ void ExtrusionModule::saveSpeedToEEPROM() {
 
 void ExtrusionModule::setSpeed(float newSpeed) {
   // Actualiza la velocidad en la variable y en el motor
-  currentSpeed = constrain(newSpeed, 0, MOTOR_MAX_SPEED);
-  stepper.setSpeed(currentSpeed);
+  // 1. Limitamos el rango (seguridad)
+  currentSpeed = constrain(newSpeed, 0.0, MAX_EXTRUSION_SPEED_MMS);
+  
+  // 2. Convertimos mm/s a pasos/segundo
+  // Fórmula: (mm/s) * (pasos/mm) = pasos/s
+  float stepsPerSec = currentSpeed * E_STEPS_PER_MM;
+  
+  // 3. Aplicamos al motor
+  stepper.setSpeed(stepsPerSec);
 }
 
 float ExtrusionModule::getSpeed() { 

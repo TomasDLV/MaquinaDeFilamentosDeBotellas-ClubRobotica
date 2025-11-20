@@ -45,12 +45,11 @@
 #define MOTOR_STEP_PIN   26
 #define MOTOR_DIR_PIN    28
 #define MOTOR_MAX_SPEED 1000
-// CHEQUEAR CUAL CORRESPONDE
-// #define MOTOR_ENABLE_PIN 54 // Pin Enable E0
-// #define MOTOR_STEP_PIN   55 // Pin Step E0
-// #define MOTOR_DIR_PIN    56 // Pin Dir E0
-// #define MOTOR_STEPS_PER_REV 200
-// #define MOTOR_MAX_SPEED 1000
-// #define MOTOR_ACCELERATION 500
+// CALIBRACIÓN: Pasos por milímetro
+// Ajusta este valor midiendo cuánto filamento entra realmente cuando pides 100mm
+#define E_STEPS_PER_MM 400.0 
+
+// Límite de seguridad en mm/s (ej. 15 mm/s es bastante rápido para PET)
+#define MAX_EXTRUSION_SPEED_MMS 15.0
 
 #endif

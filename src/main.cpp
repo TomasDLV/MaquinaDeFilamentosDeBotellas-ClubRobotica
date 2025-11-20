@@ -14,7 +14,7 @@ ExtrusionModule extruder;
 // === Variables de Estado Global ===
 // Estas son las variables que el menú modificará directamente.
 int targetTemp = 0;
-int motorRPM = 60;
+float motorSpeed = 2.5; // 2.5mm/s
 bool hotendEnabled = false; // ¿Está el calentador encendido?
 bool motorEnabled = false;
 double currentTemp = 0.0;
@@ -123,6 +123,8 @@ void setup() {
   tempController.init();
   extruder.init();
   ui.init(); 
+  // Sincronizamos
+  motorSpeed = extruder.getSpeed();
 
   Timer1.initialize(1000); // 1000us = 1ms
   Timer1.attachInterrupt(poll_inputs_isr); // Asocia la ISR
@@ -143,7 +145,7 @@ void loop() {
   currentTemp = tempController.getCurrentTemp(); // Actualiza la variable global para la UI
 
   // Llama al método update() de cada módulo. Es un bucle no bloqueante.
-  extruder.setSpeed(motorRPM);
+  extruder.setSpeed(motorSpeed);
   extruder.update();
   ui.update();
 
