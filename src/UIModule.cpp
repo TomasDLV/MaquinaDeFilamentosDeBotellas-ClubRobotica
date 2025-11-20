@@ -163,72 +163,84 @@ void UIModule::drawInfoScreen() {
     int screenWidth = u8g2.getDisplayWidth();
     
     // ============================================
-    // SECCIÓN SUPERIOR: TEMPERATURA (Dashboard)
+    // SECCIÓN SUPERIOR: HOTEND Y ESTADO
     // ============================================
     
-    // 1. Título pequeño
-    u8g2.setFont(u8g2_font_profont12_tf); // Fuente pequeña y limpia
+    u8g2.setFont(u8g2_font_profont12_tf); // Fuente pequeña
     u8g2.drawStr(0, 10, "HOTEND");
 
-    // 2. Temperatura Actual (EN GRANDE)
-    u8g2.setFont(u8g2_font_helvB18_tr); // Fuente Helvetica Negrita Grande
+    // --- NUEVO TESTIGO (INDICATOR) ---
+    // Dibujamos el estado justo al lado del título "HOTEND"
+    // Posición X calculada para que quede prolijo (aprox px 45)
+    int statusX = 48; 
+    int statusY = 0;  // Y inicial de la caja
+
+    if (hotendEnabled) {
+        // SI ESTÁ PRENDIDO: Caja negra con texto blanco (Invertido)
+        u8g2.setDrawColor(1);
+        u8g2.drawBox(statusX, statusY, 22, 11); // Caja de fondo
+        u8g2.setDrawColor(0);                   // Texto en "blanco" (hueco)
+        u8g2.drawStr(statusX + 3, statusY + 9, "ON");
+    } else {
+        // SI ESTÁ APAGADO: Marco vacío
+        u8g2.setDrawColor(1);
+        u8g2.drawFrame(statusX, statusY, 26, 11); // Marco un poco más ancho
+        u8g2.drawStr(statusX + 3, statusY + 9, "OFF");
+    }
+    u8g2.setDrawColor(1); // Restauramos color normal siempre
+
+    // ============================================
+    // DATOS DE TEMPERATURA
+    // ============================================
+
+    // Temperatura Actual (EN GRANDE)
+    u8g2.setFont(u8g2_font_helvB18_tr); // Fuente Grande
     int tempInt = (int)round(currentTemp);
     snprintf(buffer, sizeof(buffer), "%d", tempInt);
-    
-    // Calculamos ancho para alinear a la derecha o dejarlo fijo
     u8g2.drawStr(0, 35, buffer); 
     
-    // Dibujamos el símbolo de grados pequeño al lado
+    // Símbolo de grados pequeño
     int tempWidth = u8g2.getStrWidth(buffer);
     u8g2.setFont(u8g2_font_profont12_tf);
-    u8g2.drawStr(tempWidth + 2, 28, "o"); // Simula el símbolo de grados
+    u8g2.drawStr(tempWidth + 2, 28, "o"); 
 
-    // 3. Temperatura Objetivo (Texto pequeño "/ 200")
-    u8g2.setFont(u8g2_font_profont12_tf);
+    // Temperatura Objetivo ("/ 200 C")
     snprintf(buffer, sizeof(buffer), "/ %d C", targetTemp);
-    // Lo alineamos a la derecha de la pantalla
     int targetWidth = u8g2.getStrWidth(buffer);
     u8g2.drawStr(screenWidth - targetWidth, 35, buffer);
 
-    // 4. Barra de Progreso de Temperatura
-    // Dibuja un marco
-    u8g2.drawFrame(0, 40, screenWidth, 6); 
-    if (targetTemp > 0) {
-        // Calcula el ancho de la barra (mapeo simple)
+    // Barra de Progreso
+    u8g2.drawFrame(0, 40, screenWidth, 5); 
+    if (targetTemp > 0 && hotendEnabled) { // Solo muestra barra si está habilitado
         int barWidth = map(constrain(tempInt, 0, targetTemp), 0, targetTemp, 0, screenWidth - 2);
-        // Dibuja el relleno
-        u8g2.drawBox(1, 41, barWidth, 4);
+        u8g2.drawBox(1, 41, barWidth, 3);
     }
 
     // ============================================
     // SECCIÓN INFERIOR: MOTOR / EXTRUSIÓN
     // ============================================
     
-    int yMotorBase = 62; // Base de la línea de texto inferior
+    int yMotorBase = 62; 
 
-    // 1. Estado del Motor (Caja visual)
-    u8g2.setFont(u8g2_font_profont12_tf); // Volvemos a fuente normal
+    // Estado del Motor (Igual estilo que arriba)
+    u8g2.setFont(u8g2_font_profont12_tf);
     
     if (motorEnabled) {
-        // Si está ENCENDIDO: Caja negra con texto blanco (Invertido)
         u8g2.setDrawColor(1);
-        u8g2.drawBox(0, yMotorBase - 11, 32, 13); // Caja de fondo
-        u8g2.setDrawColor(0); // Texto transparente (color fondo)
+        u8g2.drawBox(0, yMotorBase - 11, 32, 13); 
+        u8g2.setDrawColor(0);
         u8g2.drawStr(4, yMotorBase, "RUN");
-        u8g2.setDrawColor(1); // Restaurar color normal
+        u8g2.setDrawColor(1);
     } else {
-        // Si está APAGADO: Caja vacía (Marco) con texto normal
         u8g2.drawFrame(0, yMotorBase - 11, 32, 13);
         u8g2.drawStr(2, yMotorBase, "STOP");
     }
 
-    // 2. Velocidad (Alineada a la derecha)
-    // Convertimos el float a texto
+    // Velocidad (mm/s)
     char speedStr[10];
-    dtostrf(motorSpeed, 4, 1, speedStr); // ej: " 2.5"
+    dtostrf(motorSpeed, 4, 1, speedStr); 
     snprintf(buffer, sizeof(buffer), "%s mm/s", speedStr);
     
-    // Usamos una fuente negrita media para el número
     u8g2.setFont(u8g2_font_6x12_tr); 
     int speedWidth = u8g2.getStrWidth(buffer);
     u8g2.drawStr(screenWidth - speedWidth, yMotorBase, buffer);
