@@ -4,6 +4,7 @@
 #define EDITABLEVALUEMENUITEM_H
 
 #include "MenuItem.h"
+#include <Arduino.h> // Necesario para millis()
 
 class EditableValueMenuItem : public MenuItem {
 private:
@@ -12,37 +13,40 @@ private:
     int min_val, max_val;
     bool m_isEditing;
 
+    // --- VARIABLES DE ACELERACIÓN AJUSTADAS ---
+    unsigned long lastInputTime;
+    
+    // CAMBIO 1: Aumentamos el tiempo de tolerancia a 200ms.
+    // Como tu loop() es lento por los delays de temperatura, necesitamos ser más pacientes.
+    const unsigned long fastThreshold = 200; 
+
+    // CAMBIO 2: Salto de 5 en 5 (puedes cambiarlo a 10 si quieres más velocidad)
+    const int fastStep = 5;    
+
 public:
     EditableValueMenuItem(const char* title, int* value_ptr, const char* unit, int min, int max, MenuItem* parent = nullptr)
-        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), m_isEditing(false) {}
+        : MenuItem(title, parent), value_ptr(value_ptr), unit(unit), min_val(min), max_val(max), m_isEditing(false), lastInputTime(0) {}
 
     virtual bool isEditing() override { return m_isEditing; }
-    // --- FUNCIÓN DE DIBUJADO CORREGIDA ---
+
     void draw(U8G2 &u8g2, int x, int y, bool selected) override {
         char buffer[32];
         
-        // Primero, preparamos el texto que vamos a mostrar
         if (m_isEditing) {
             snprintf(buffer, sizeof(buffer), "%s[%d]%s", title, *value_ptr, unit);
         } else {
             snprintf(buffer, sizeof(buffer), "%s%d%s", title, *value_ptr, unit);
         }
 
-        // Ahora, manejamos el dibujado nosotros mismos
         if (selected) {
-            // Si el ítem está seleccionado, dibujamos el fondo y el texto invertido
-            u8g2.setDrawColor(1); // Color del pincel a blanco
+            u8g2.setDrawColor(1);
             u8g2.drawBox(x, y - u8g2.getAscent(), u8g2.getDisplayWidth(), u8g2.getAscent() + 2);
-            u8g2.setDrawColor(0); // Color del pincel a negro para el texto
+            u8g2.setDrawColor(0);
         } else {
-            // Si no está seleccionado, solo fijamos el color del pincel a blanco
             u8g2.setDrawColor(1);
         }
 
-        // Finalmente, dibujamos nuestro texto formateado
         u8g2.drawStr(x + 2, y, buffer);
-
-        // MUY IMPORTANTE: Dejamos el pincel en blanco para el resto de dibujos
         u8g2.setDrawColor(1);
     }
 
@@ -50,23 +54,31 @@ public:
         if (!m_isEditing) {
             if (input == INPUT_SELECT) {
                 m_isEditing = true;
-                return this; // Nos quedamos en este item para editar
+                return this; 
             }
         } else {
-            if (input == INPUT_NEXT) (*value_ptr)++;
-            if (input == INPUT_PREV) (*value_ptr)--;
+            // --- LÓGICA DE ACELERACIÓN ---
+            int currentStep = 1; // Paso normal
+            unsigned long now = millis();
+
+            // Si el tiempo entre este giro y el anterior es menor a 200ms, activamos TURBO
+            if (now - lastInputTime < fastThreshold) {
+                currentStep = fastStep; 
+            }
+            lastInputTime = now;
+
+            // Aplicamos
+            if (input == INPUT_NEXT) (*value_ptr) += currentStep;
+            if (input == INPUT_PREV) (*value_ptr) -= currentStep;
+            
             *value_ptr = constrain(*value_ptr, min_val, max_val);
 
-            // Si se presiona SELECT de nuevo, salimos del modo edición
             if (input == INPUT_SELECT || input == INPUT_BACK) {
                 m_isEditing = false;
-                // No retornamos 'parent' aquí para quedarnos en el menú actual,
-                // simplemente salimos del modo edición.
             }
         }
-        return this; // El control siempre se queda aquí hasta que se navega fuera
+        return this; 
     }
-    
 };
 
 #endif
