@@ -6,9 +6,9 @@
 #include "MenuItem.h"
 
 class SubMenu : public MenuItem {
-private:
+public:
     MenuItem** items;
-    const int itemCount;
+    int itemCount;
     int selectedIndex;
     int topItemIndex; // Para controlar el scrolling
 

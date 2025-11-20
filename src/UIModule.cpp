@@ -28,6 +28,36 @@ extern void do_dummy_function();
 extern void do_saveSettings();
 extern void do_showInfoScreen();
 
+
+// --- CLASE ESPECIAL PARA EL BOTÓN "VOLVER" ---
+class BackMenuItem : public MenuItem {
+private:
+    MenuItem* targetMenu; // Guardamos explícitamente a dónde queremos ir
+
+public:
+    // El constructor recibe el menú de destino (target)
+    BackMenuItem(const char* title, MenuItem* target) 
+        : MenuItem(title, nullptr), targetMenu(target) {} 
+        // Pasamos nullptr al padre base porque usaremos nuestro propio 'targetMenu'
+
+    void draw(U8G2 &u8g2, int x, int y, bool selected) override {
+        if (selected) {
+            u8g2.setDrawColor(1);
+            u8g2.drawBox(x, y - u8g2.getAscent(), u8g2.getDisplayWidth(), u8g2.getAscent() + 2);
+            u8g2.setDrawColor(0);
+        } else {
+            u8g2.setDrawColor(1);
+        }
+        u8g2.drawStr(x + 2, y, title);
+        u8g2.setDrawColor(1);
+    }
+
+    MenuItem* handleInput(MenuInput input) override {
+        // Al hacer click, devolvemos el menú objetivo que guardamos
+        if (input == INPUT_SELECT) return targetMenu; 
+        return this;
+    }
+};
 // --- Implementación de los Métodos de la Clase ---
 
 // Constructor: Inicializa el objeto u8g2 con los pines SPI y las variables de polling
@@ -62,43 +92,51 @@ void UIModule::init() {
 
 // Construye la estructura del menú usando objetos estáticos y arreglos
 void UIModule::buildMenu() {
-    /*
-    VISTA MENU:
-    
-    <- Ver Info
-    Temperatura: * °
-    Encender Hotend
-    Velocidad: * RPM
-    Encender Motor
-    Configuracion PID  :
-        | <- Volver
-        | Kp:
-        | Ki:
-        | Kd:
-    Guardar en Memoria
+    // Declaramos primero el Menú Principal (puntero) para poder usarlo en el botón "Volver"
+    static SubMenu menuPrincipal("Menu Principal", nullptr, nullptr, 0); // Se rellenará luego
 
+    // --- SUBMENU PID ---
+    // Usamos la nueva clase BackMenuItem para que el botón funcione de verdad
+    // Le pasamos &menuPrincipal como destino al volver
+    static BackMenuItem itemPIDVolver("<- Volver", &menuPrincipal);
     
-    */
-    static ActionMenuItem itemPIDVolver("<- Volver", do_dummy_function);
     static EditableFloatValueMenuItem itemPID_Kp("Kp: ", &kp, "", 0, 100, 0.5);
     static EditableFloatValueMenuItem itemPID_Ki("Ki: ", &ki, "", 0, 100, 0.1);
     static EditableFloatValueMenuItem itemPID_Kd("Kd: ", &kd, "", 0, 200, 1.0);
+    
     static MenuItem* pidItems[] = {&itemPIDVolver, &itemPID_Kp, &itemPID_Ki, &itemPID_Kd};
-    static SubMenu menuConfigPID("Configuracion PID", nullptr, pidItems, 4);
+    static SubMenu menuConfigPID("Configuracion PID", &menuPrincipal, pidItems, 4);
 
+    // --- MENU PRINCIPAL ---
     static ActionMenuItem itemPrincipalInfo("<- Ver Info", do_showInfoScreen);
     static EditableValueMenuItem itemPrincipalTemp("Temperatura: ", &targetTemp, " C", 0, 260);
     static EditableFloatValueMenuItem itemPrincipalVel("Velocidad: ", &motorSpeed, " mm/s", 0.0, 15.0 , 0.1);
     static ActionMenuItem itemPrincipalHotend(&hotendEnabled,"Encender Hotend"," Apagar  Hotend", do_toggleHotend);
     static ActionMenuItem itemPrincipalMotor(&motorEnabled,"Encender Motor"," Apagar  Motor", do_toggleMotor);
     static ActionMenuItem itemPrincipalGuardar("Guardar en Memoria", do_saveSettings);
-    static MenuItem* mainMenuItems[] = { &itemPrincipalInfo, &itemPrincipalTemp, &itemPrincipalVel/*, &menuConfigPID*/, &itemPrincipalHotend, &itemPrincipalMotor, &itemPrincipalGuardar };
-    static SubMenu menuPrincipal("Menu Principal", nullptr, mainMenuItems, 6);
 
+    // LISTA DE ITEMS DEL PRINCIPAL
+    // CORRECCIÓN 1: Descomentamos &menuConfigPID
+    static MenuItem* mainMenuItems[] = { 
+        &itemPrincipalInfo, 
+        &itemPrincipalTemp, 
+        &itemPrincipalVel, 
+        &menuConfigPID,    // <--- ¡AHORA SÍ ESTÁ ACTIVO!
+        &itemPrincipalHotend, 
+        &itemPrincipalMotor, 
+        &itemPrincipalGuardar 
+    };
+
+    
+    // *Truco*: Como ya definimos 'menuPrincipal' arriba vacía para tener el puntero,
+    // ahora le inyectamos los items manualmente o redefinimos.
+    // Dado que SubMenu guarda los items en sus variables públicas (suponiendo tu clase SubMenu):
+    menuPrincipal.items = mainMenuItems;
+    menuPrincipal.itemCount = 7; 
+    
+    // Asignamos menú inicial
     currentMenu = &menuPrincipal;
     rootMenu = &menuPrincipal;
-
-    menuConfigPID.parent = &menuPrincipal;
 }
 
 // Bucle principal de la UI: Lee entradas, actualiza estado y dibuja
