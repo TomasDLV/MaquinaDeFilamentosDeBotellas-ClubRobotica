@@ -5,84 +5,86 @@
 #include "UIModule.h"
 #include "TemperatureModule.h"
 #include "ExtrusionModule.h"
-#include <TimerOne.h> // --- LIBRERÍA DE INTERRUPCIÓN ---
-// === Creación de los Módulos (Objetos Globales) ===
+#include <TimerOne.h> 
+
+// === Objetos ===
 UIModule ui;
 TemperatureModule tempController;
 ExtrusionModule extruder;
 
-// === Variables de Estado Global ===
-// Estas son las variables que el menú modificará directamente.
+// === Variables Globales ===
 int targetTemp = 0;
-float motorSpeed = 2.5; // 2.5mm/s
-bool hotendEnabled = false; // ¿Está el calentador encendido?
+float motorSpeed = 2.5; 
+bool hotendEnabled = false; 
 bool motorEnabled = false;
 double currentTemp = 0.0;
-bool filamentStatus = true; // Placeholder para el futuro sensor
+bool filamentStatus = true; 
 
-// --- Variables para el PID (editables desde el menú) ---
-// Se inicializan con los valores de Config.h, pero pueden ser modificadas en tiempo real.
+// PID
 float kp = TEMP_KP;
 float ki = TEMP_KI;
 float kd = TEMP_KD;
 
-// Variables volátiles para la ISR del Temporizador ---
-// Estas variables son el "puente" entre la ISR y el UIModule.
+// Interrupción
 volatile int g_encoderDelta = 0;
 volatile bool g_buttonClicked = false;
-// === Funciones de Acción para el Menú ===
-// Estas son las "acciones" que se conectan a los botones del menú.
 
+// === Funciones Menu ===
 void do_toggleHotend() {
   hotendEnabled = !hotendEnabled;
+  if (hotendEnabled) tempController.setTargetTemp(targetTemp);
+  else tempController.setTargetTemp(0);
+}
+
+void do_toggleMotor() {
+  motorEnabled = !motorEnabled;
+  if (motorEnabled) extruder.start();
+  else extruder.stop();
+}
+
+void do_dummy_function() {}
+
+// En main.cpp
+
+void do_saveSettings() {
+  // 1. Actualizar Motor y PID (Esto es seguro)
+  extruder.setSpeed(motorSpeed);
+  tempController.setTunings(kp, ki, kd);
+
+  // 2. --- CORRECCIÓN CRÍTICA ---
+  // Solo actualizamos el objetivo del PID si el Hotend está habilitado.
+  // Si está APAGADO, nos aseguramos de enviarle 0 al controlador para que siga apagado.
   if (hotendEnabled) {
     tempController.setTargetTemp(targetTemp);
   } else {
     tempController.setTargetTemp(0);
   }
-}
 
-void do_toggleMotor() {
-  motorEnabled = !motorEnabled;
-  if (motorEnabled) {
-    extruder.start();
-  } else {
-    extruder.stop();
-  }
-}
-
-// Función vacía usada por el botón "Volver"
-void do_dummy_function() {}
-
-// Guarda la configuración actual en la memoria no volátil
-void do_saveSettings() {
-  // 1. Actualizar los módulos con los valores del menú
-  extruder.setSpeed(motorSpeed);
-  tempController.setTargetTemp(targetTemp);
-  tempController.setTunings(kp, ki, kd);
-
-  // 2. Guardar en EEPROM
+  // 3. Guardar en EEPROM
   extruder.saveSpeedToEEPROM();
-  tempController.saveSettingsToEEPROM();
-
-  // 3. --- FEEDBACK VISUAL Y SONORO ---
-  Serial.println("¡Guardado con exito!");
   
-  // Hacemos un BEEP de confirmación (2000Hz por 200ms)
-  // Nota: tone() funciona en pines PWM o digitales en la mayoría de Arduinos
+  // --- CAMBIO AQUÍ ---
+  // Le pasamos 'targetTemp' (ej. 200) explícitamente.
+  // Así se guarda el 200 en la memoria, aunque el controlador esté en 0.
+  tempController.saveSettingsToEEPROM(targetTemp);
+
+  // 4. Feedback
+  Serial.println("¡Guardado con exito!");
   tone(LCD_BEEPER_PIN, 2000, 200); 
 }
 
-// Le dice al módulo de UI que vuelva a la pantalla de información
 void do_showInfoScreen() {
   ui.showInfoScreen();
 }
+
 // ========================================================================
-// === ISR DEL TEMPORIZADOR (MÉTODO MARLIN) ===============================
+// === ISR DEL TEMPORIZADOR ===
 // ========================================================================
-// Esta función se llamará automáticamente 1000 veces por segundo
-void poll_inputs_isr() {
-    // --- Lógica del Encoder ---
+void system_isr() {
+    // 1. Motor (Prioridad)
+    extruder.update(); 
+
+    // 2. Encoder
     static int8_t lastEncoderState = 0;
     static int encoderAccumulator = 0;
     static const int8_t lookup_table[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
@@ -94,18 +96,22 @@ void poll_inputs_isr() {
     encoderAccumulator += lookup_table[index];
 
     if (encoderAccumulator >= 4) {
-        g_encoderDelta++; // Incrementa el contador global
+        g_encoderDelta++;
         encoderAccumulator = 0;
     } else if (encoderAccumulator <= -4) {
-        g_encoderDelta--; // Decrementa el contador global
+        g_encoderDelta--;
         encoderAccumulator = 0;
     }
 
-    // --- Lógica del Botón (Debounce por conteo de ticks) ---
+    // 3. Botón
     static int buttonState = HIGH;
     static int lastReadingState = HIGH;
     static uint8_t debounceCounter = 0;
-    const uint8_t debounceTicks = 50; // 50 llamadas * 1ms/call = 50ms
+    
+    // --- CAMBIO AQUÍ: Ajuste de Debounce ---
+    // Como el Timer ahora va a 1ms (1000us), 50 ticks = 50ms.
+    // Antes con 200us usábamos 250 ticks. Ahora bajamos a 50.
+    const uint8_t debounceTicks = 50; 
 
     int currentReading = digitalRead(ENC_BTN_PIN);
     
@@ -118,61 +124,55 @@ void poll_inputs_isr() {
             if (currentReading != buttonState) {
                 buttonState = currentReading;
                 if (buttonState == LOW) {
-                    g_buttonClicked = true; // Registra el click
+                    g_buttonClicked = true; 
                 }
             }
         }
     }
     lastReadingState = currentReading;
 }
-// === Arduino Setup ===
-// Se ejecuta una sola vez al encender la máquina.
+
+// === Setup ===
 void setup() {
   Serial.begin(115200);
 
-  // 1. Iniciamos los módulos (esto carga valores por defecto o internos)
+  // Inicialización de módulos
   tempController.init();
   extruder.init();
-  ui.init(); 
+  ui.init(); // Esto inicializa la pantalla (u8g2.begin)
 
-  // 2. FORZAMOS la carga desde la EEPROM
-  // (Asegúrate de haber implementado estas funciones como vimos antes)
+  // Carga de EEPROM
   tempController.loadSettingsFromEEPROM();
   extruder.loadSpeedFromEEPROM();
 
-  // 3. --- CORRECCIÓN CRÍTICA ---
-  // Actualizamos las variables globales del menú con lo que se leyó de la memoria.
-  // Si no haces esto, el valor fijo de 'motorSpeed' sobrescribirá la memoria.
+  // Sincronización de variables
   motorSpeed = extruder.getSpeed();
   targetTemp = tempController.getTargetTemp();
-  
-  // También el PID
+  hotendEnabled = false; 
+  tempController.setTargetTemp(0); // Inicia apagado por seguridad
   kp = tempController.getKp();
   ki = tempController.getKi();
   kd = tempController.getKd();
 
-  // 4. Configuramos Timer y resto
+  // --- CAMBIO AQUÍ: Timer a 1000us (1ms) ---
+  // Esto es suficientemente rápido para el motor, pero deja vivir a la pantalla.
   Timer1.initialize(1000); 
-  Timer1.attachInterrupt(poll_inputs_isr); 
+  Timer1.attachInterrupt(system_isr); 
 
-  Serial.println("Sistema iniciado. Datos cargados de EEPROM.");
+  Serial.println("Sistema listo.");
 }
 
-// === Arduino Loop ===
-// Este bucle se ejecuta continuamente, lo más rápido posible.
+// === Loop ===
 void loop() {
-  // Primero, actualizamos tunings del PID si han cambiado desde el menú
-  tempController.setTunings(kp, ki, kd);
-
-  // Luego, actualizamos el módulo de temperatura (esto mide y guarda currentTemp)
+  // 1. PID y Temp
   tempController.update();
+  currentTemp = tempController.getCurrentTemp(); 
 
-  // Ahora sí, leemos la última temperatura estable ya calculada por el módulo. Es importante que update esté antes para que lea la temperatura actualizada.
-  currentTemp = tempController.getCurrentTemp(); // Actualiza la variable global para la UI
-
-  // Llama al método update() de cada módulo. Es un bucle no bloqueante.
+  // 2. Motor (Solo setea velocidad, el movimiento lo hace la ISR)
+  noInterrupts();
   extruder.setSpeed(motorSpeed);
-  extruder.update();
-  ui.update();
+  interrupts();
 
+  // 3. Pantalla
+  ui.update(); 
 }
