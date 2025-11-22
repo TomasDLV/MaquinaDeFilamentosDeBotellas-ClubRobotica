@@ -231,49 +231,54 @@ void UIModule::buildMenu() {
 }
 
 // Bucle principal de la UI: Lee entradas, actualiza estado y dibuja
-void UIModule::update()
-{
-    // 1. Lee los valores de las variables globales que la ISR actualiza
-    noInterrupts(); // Desactiva interrupciones brevemente para leer
-    int d = g_encoderDelta;
-    g_encoderDelta = 0; // Resetea el delta
-    bool clicked = g_buttonClicked;
-    g_buttonClicked = false; // Resetea el click
-    interrupts();            // Reactiva interrupciones
+// En UIModule.cpp
 
-    // 2. Convierte los deltas en eventos de menú
-    MenuInput input = INPUT_NONE;
-    if (d > 0)
-        input = INPUT_NEXT;
-    if (d < 0)
-        input = INPUT_PREV;
-    if (clicked)
-        input = INPUT_SELECT;
+void UIModule::update() {
+  
+  // 1. LEER DATOS DE LA ISR (Sección Crítica)
+  // Leemos los contadores que la interrupción modificó en segundo plano.
+  // Usamos noInterrupts() para asegurar que no cambien mientras los leemos.
+  noInterrupts();
+  int d = g_encoderDelta;       // Cuánto giró el encoder
+  g_encoderDelta = 0;           // Reseteamos para la próxima
+  bool clicked = g_buttonClicked; // Si se pulsó el botón
+  g_buttonClicked = false;      // Reseteamos
+  interrupts(); 
+  
+  // 2. TRADUCIR A EVENTOS DE MENÚ
+  MenuInput input = INPUT_NONE;
+  if (d > 0) input = INPUT_NEXT;
+  if (d < 0) input = INPUT_PREV;
+  if (clicked) input = INPUT_SELECT;
 
-    // 3. La máquina de estados procesa los eventos
-    switch (currentState)
-    {
+  // 3. MÁQUINA DE ESTADOS (Lógica de Navegación)
+  switch (currentState) {
     case STATE_INFO_SCREEN:
-        if (input == INPUT_SELECT)
-        {
-            currentState = STATE_MENU;
-            currentMenu = rootMenu; // Resetea al menú principal
-        }
-        break;
-    case STATE_MENU:
-        if (input != INPUT_NONE && currentMenu != nullptr)
-        {
-            MenuItem *nextMenu = currentMenu->handleInput(input);
-            if (nextMenu != nullptr)
-            {
-                currentMenu = nextMenu;
-            }
-        }
-        break;
-    }
+      // Si estamos en la pantalla de información y se pulsa el botón, entramos al menú
+      if (input == INPUT_SELECT) {
+        currentState = STATE_MENU;
+        currentMenu = rootMenu; // Volvemos a la raíz del menú
+      }
+      break;
 
-    // 4. Se redibuja la pantalla (esta es la parte lenta del loop)
-    draw();
+    case STATE_MENU:
+      // Si estamos en el menú y hay entrada, se la pasamos al ítem actual
+      if (input != INPUT_NONE && currentMenu != nullptr) {
+          MenuItem* nextMenu = currentMenu->handleInput(input);
+          
+          // Si handleInput devuelve un puntero diferente, cambiamos de menú
+          // (Sirve para entrar a submenús o volver atrás)
+          if (nextMenu != nullptr) {
+             currentMenu = nextMenu;
+          }
+      }
+      break;
+  }
+  
+  // 4. DIBUJAR PANTALLA
+  // Llamamos a draw() siempre. 
+  // Aunque esto tarde 50ms, el motor NO se frenará porque ahora lo mueve la interrupción.
+  draw();
 }
 
 // Función principal de dibujo: llama a la función específica según el estado

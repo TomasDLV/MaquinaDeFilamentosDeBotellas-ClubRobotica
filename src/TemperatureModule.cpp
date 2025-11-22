@@ -5,27 +5,24 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
-// El constructor inicializa el objeto PID usando una lista de inicialización
 TemperatureModule::TemperatureModule() : 
   myPID(&pidInput, &pidOutput, &pidSetpoint, TEMP_KP, TEMP_KI, TEMP_KD, DIRECT)
 {
-  // Guardamos las constantes por si necesitamos reajustarlas en el futuro
   kp = TEMP_KP;
   ki = TEMP_KI;
   kd = TEMP_KD;
-
   currentTemp = 0.0;
 }
 
 void TemperatureModule::init() {
   pinMode(TEMP_HEATER_PIN, OUTPUT);
-  digitalWrite(TEMP_HEATER_PIN, LOW); // Apagar el calentador al inicio
+  // LÓGICA NORMAL: LOW es APAGADO
+  digitalWrite(TEMP_HEATER_PIN, LOW); 
 
-  pidSetpoint = 0; // Iniciar con el PID desactivado (objetivo 0°C)
+  pidSetpoint = 0; 
 
-  // Configurar la librería PID con los valores de Config.h
   myPID.SetMode(AUTOMATIC);
-  myPID.SetOutputLimits(0, 255); // Salida PWM de 0 a 255
+  myPID.SetOutputLimits(0, 255); 
   myPID.SetSampleTime(PID_SAMPLE_TIME);
 }
 
@@ -37,25 +34,26 @@ int TemperatureModule::getTargetTemp() {
   return (int)pidSetpoint;
 }
 
-// Implementación de tu lógica precisa para leer la temperatura
+// En TemperatureModule.cpp
+
 double TemperatureModule::getTemp() {
   long sum = 0;
-  for (int i = 0; i < THERMISTOR_SAMPLES; i++) {
+  
+  // Leemos varias veces RÁPIDO (sin delay) para promediar ruido eléctrico
+  // Reducimos las muestras a 10 o 20 para no bloquear
+  int muestras = 20; 
+  
+  for (int i = 0; i < muestras; i++) {
     sum += analogRead(TEMP_THERMISTOR_PIN);
-    delay(5); // Pequeño delay para estabilizar la lectura
+    // ¡ELIMINAMOS EL delay(5)!
   }
-  float lecturaProm = sum / (float)THERMISTOR_SAMPLES;
+  
+  float lecturaProm = sum / (float)muestras;
 
+  // ... (el resto de la matemática sigue igual) ...
   float Vout = lecturaProm * VCC / 1023.0;
-  
-  // Evitar división por cero si Vout es igual o mayor a VCC
-  if (Vout >= VCC) {
-    Vout = VCC - 0.001;
-  }
-  
+  if (Vout >= VCC) Vout = VCC - 0.001;
   float Rntc = (Vout * R_REF) / (VCC - Vout);
-  
-  // Calcular temperatura con la ecuación de Beta
   float tempK = 1.0 / ((1.0 / NTC_T0) + (1.0 / NTC_BETA) * log(Rntc / NTC_R0));
   float tempC = tempK - 273.15 - TEMP_OFFSET;
   
@@ -63,41 +61,39 @@ double TemperatureModule::getTemp() {
 }
 
 void TemperatureModule::update() {
-  // SIEMPRE medimos y guardamos la temperatura actual para la UI
-  currentTemp = getTemp(); // esta currentTemp es local al módulo de temperatura
+  // 1. Medimos la temperatura actual
+  currentTemp = getTemp(); 
 
-  // Si el objetivo es 0 o menos, mostramos la temp pero mantenemos el calentador apagado
+  // 2. SEGURIDAD: Si el objetivo es 0 (o negativo), apagamos a la fuerza.
+  // Esto evita que el PID intente "calentar un poquito" si hay ruido.
   if (pidSetpoint <= 0) {
-    analogWrite(TEMP_HEATER_PIN, 0); // Calentador apagado
-    return; // No corremos el PID, pero currentTemp ya quedó actualizado
+    digitalWrite(TEMP_HEATER_PIN, LOW); // APAGADO (Lógica Normal)
+    return; // Salimos de la función, no calculamos PID
   }
 
-  // Alimentamos el PID con la última lectura estable
+  // 3. PID: Alimentamos el algoritmo
   pidInput = currentTemp;
-
-  // Calculamos y aplicamos el control
-  myPID.Compute(); // La librería decide si es hora de calcular y lo hace
-  analogWrite(TEMP_HEATER_PIN, (int)pidOutput); //Aplicamos la salida PWM
+  
+  // La librería decide si ya pasó el tiempo (PID_SAMPLE_TIME) para recalcular
+  myPID.Compute(); 
+  
+  // 4. APLICAR POTENCIA
+  // Lógica Normal: Mayor valor de salida PID (0-255) = Más voltaje al pin
+  analogWrite(TEMP_HEATER_PIN, (int)pidOutput);
 }
 
+// --- Funciones de Configuración y EEPROM ---
 
-// Función para ajustar las constantes del PID "en caliente"
 void TemperatureModule::setTunings(double newKp, double newKi, double newKd) {
-    // 1. Le decimos a la librería PID que use los nuevos valores (ESTO YA LO TENÍAS)
     myPID.SetTunings(newKp, newKi, newKd);
-
-    // 2. --- ESTO FALTABA --- 
-    // Tenemos que actualizar también las variables "espejo" de la clase
-    // porque estas son las que usa saveSettingsToEEPROM() al guardar.
     this->kp = newKp;
     this->ki = newKi;
     this->kd = newKd;
 }
-void TemperatureModule::saveSettingsToEEPROM() {
-    // Guardamos Target Temp
-    // Nota: pidSetpoint es double, pero targetTemp en main es int. 
-    // Guardaremos como int para ahorrar espacio o double si prefieres. Usaremos int para target.
-    int targetToSave = (int)pidSetpoint;
+
+void TemperatureModule::saveSettingsToEEPROM(int targetToSave) {
+    // Guardamos el valor que nos pasan por parámetro (ej. 200)
+    // independientemente de si el calentador está prendido o apagado ahora.
     EEPROM.put(EEPROM_ADDR_TARGET_TEMP, targetToSave);
 
     // Guardamos PID
@@ -105,28 +101,22 @@ void TemperatureModule::saveSettingsToEEPROM() {
     EEPROM.put(EEPROM_ADDR_KI, ki);
     EEPROM.put(EEPROM_ADDR_KD, kd);
 }
-
 void TemperatureModule::loadSettingsFromEEPROM() {
-    // 1. Cargar Temperatura Objetivo
     int storedTarget;
     EEPROM.get(EEPROM_ADDR_TARGET_TEMP, storedTarget);
     
-    // Validación: Si es la primera vez (EEPROM virgen = -1 o 65535), ponemos 0
     if (storedTarget < 0 || storedTarget > 300) {
         pidSetpoint = 0; 
     } else {
         pidSetpoint = storedTarget;
     }
 
-    // 2. Cargar PID
     double tempKp, tempKi, tempKd;
     EEPROM.get(EEPROM_ADDR_KP, tempKp);
     EEPROM.get(EEPROM_ADDR_KI, tempKi);
     EEPROM.get(EEPROM_ADDR_KD, tempKd);
 
-    // Validación básica de NaN (Not a Number)
     if (isnan(tempKp) || tempKp < 0) {
-        // Si la EEPROM está vacía, cargamos los defaults de Config.h
         kp = TEMP_KP; 
         ki = TEMP_KI; 
         kd = TEMP_KD;
@@ -136,6 +126,5 @@ void TemperatureModule::loadSettingsFromEEPROM() {
         kd = tempKd;
     }
     
-    // Aplicamos los valores cargados al objeto PID inmediatamente
     myPID.SetTunings(kp, ki, kd);
 }

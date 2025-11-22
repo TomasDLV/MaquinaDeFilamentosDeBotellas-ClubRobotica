@@ -33,7 +33,7 @@ class TemperatureModule {
     double getCurrentTemp() const { return currentTemp; }
     // Función para poder ajustar el PID desde el menú en el futuro
     void setTunings(double Kp, double Ki, double Kd);
-    void saveSettingsToEEPROM();
+    void saveSettingsToEEPROM(int targetToSave);
     void loadSettingsFromEEPROM();
 };
 

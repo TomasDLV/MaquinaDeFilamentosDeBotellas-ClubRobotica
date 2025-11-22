@@ -22,7 +22,7 @@ public:
     void init();   // Método de inicialización
     void update(); // Bucle principal de la UI
     void showInfoScreen(); // Cambia al estado de pantalla de información
-
+    
     // --- ELIMINADO: Ya no usamos ISRs ---
     // static void encoder_isr();
     // static void button_isr();
