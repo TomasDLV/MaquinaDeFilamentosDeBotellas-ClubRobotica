@@ -8,11 +8,13 @@
 #define LCD_CLK_PIN 23
 #define LCD_CS_PIN  16
 #define LCD_MOSI_PIN 17
+#define LCD_BEEPER_PIN 37
 
 // Encoder Rotativo (con interrupciones)
 #define ENC_A_PIN   33
 #define ENC_B_PIN   31
 #define ENC_BTN_PIN 35
+
 
 // --------- Módulo de Temperatura ---------
 // --- Parámetros del Termistor NTC ---

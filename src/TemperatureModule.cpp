@@ -82,8 +82,16 @@ void TemperatureModule::update() {
 
 
 // Función para ajustar las constantes del PID "en caliente"
-void TemperatureModule::setTunings(double Kp, double Ki, double Kd) {
-    myPID.SetTunings(Kp, Ki, Kd);
+void TemperatureModule::setTunings(double newKp, double newKi, double newKd) {
+    // 1. Le decimos a la librería PID que use los nuevos valores (ESTO YA LO TENÍAS)
+    myPID.SetTunings(newKp, newKi, newKd);
+
+    // 2. --- ESTO FALTABA --- 
+    // Tenemos que actualizar también las variables "espejo" de la clase
+    // porque estas son las que usa saveSettingsToEEPROM() al guardar.
+    this->kp = newKp;
+    this->ki = newKi;
+    this->kd = newKd;
 }
 void TemperatureModule::saveSettingsToEEPROM() {
     // Guardamos Target Temp

@@ -56,18 +56,21 @@ void do_dummy_function() {}
 
 // Guarda la configuración actual en la memoria no volátil
 void do_saveSettings() {
-  // 1. Asegurarnos que los módulos tengan los valores más recientes del menú
-  // (Aunque el loop lo hace constantemente, es bueno asegurar antes de guardar)
+  // 1. Actualizar los módulos con los valores del menú
   extruder.setSpeed(motorSpeed);
   tempController.setTargetTemp(targetTemp);
   tempController.setTunings(kp, ki, kd);
 
-  // 2. Ordenar a los módulos que escriban en la memoria
+  // 2. Guardar en EEPROM
   extruder.saveSpeedToEEPROM();
   tempController.saveSettingsToEEPROM();
 
-  // Opcional: Feedback visual (puedes hacer un pequeño parpadeo o mensaje en pantalla si quieres)
-  Serial.println("Configuracion guardada en EEPROM.");
+  // 3. --- FEEDBACK VISUAL Y SONORO ---
+  Serial.println("¡Guardado con exito!");
+  
+  // Hacemos un BEEP de confirmación (2000Hz por 200ms)
+  // Nota: tone() funciona en pines PWM o digitales en la mayoría de Arduinos
+  tone(LCD_BEEPER_PIN, 2000, 200); 
 }
 
 // Le dice al módulo de UI que vuelva a la pantalla de información
@@ -126,32 +129,33 @@ void poll_inputs_isr() {
 // Se ejecuta una sola vez al encender la máquina.
 void setup() {
   Serial.begin(115200);
-  //Wire.begin(); // Importante: Inicia el bus I2C para la pantalla
 
-  // 1. Iniciar Módulos
+  // 1. Iniciamos los módulos (esto carga valores por defecto o internos)
   tempController.init();
   extruder.init();
   ui.init(); 
 
-  // 2. CARGAR DATOS DE EEPROM A LOS MÓDULOS
+  // 2. FORZAMOS la carga desde la EEPROM
+  // (Asegúrate de haber implementado estas funciones como vimos antes)
   tempController.loadSettingsFromEEPROM();
   extruder.loadSpeedFromEEPROM();
 
-  // 3. SINCRONIZAR VARIABLES GLOBALES (MENU) CON LO CARGADO
-  // El módulo ya tiene los datos guardados, ahora actualizamos las variables
-  // que usa el menú para mostrarlos.
+  // 3. --- CORRECCIÓN CRÍTICA ---
+  // Actualizamos las variables globales del menú con lo que se leyó de la memoria.
+  // Si no haces esto, el valor fijo de 'motorSpeed' sobrescribirá la memoria.
   motorSpeed = extruder.getSpeed();
   targetTemp = tempController.getTargetTemp();
   
-  // También recuperamos el PID guardado para que el menú lo muestre
+  // También el PID
   kp = tempController.getKp();
   ki = tempController.getKi();
   kd = tempController.getKd();
 
-  Timer1.initialize(1000); // 1000us = 1ms
-  Timer1.attachInterrupt(poll_inputs_isr); // Asocia la ISR
+  // 4. Configuramos Timer y resto
+  Timer1.initialize(1000); 
+  Timer1.attachInterrupt(poll_inputs_isr); 
 
-  Serial.println("Sistema listo.");
+  Serial.println("Sistema iniciado. Datos cargados de EEPROM.");
 }
 
 // === Arduino Loop ===
