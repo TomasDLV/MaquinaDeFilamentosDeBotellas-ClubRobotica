@@ -53,6 +53,9 @@ private:
     // // Funciones privadas para leer las entradas por polling
     // int readEncoder();     // Lee el giro del encoder
     // bool readButton();     // Lee la pulsación del botón (con debounce)
+
+    // Menu de Error Seguridad Temperatura
+    void drawErrorScreen(TempError err);
 };
 
 #endif // UI_MODULE_H

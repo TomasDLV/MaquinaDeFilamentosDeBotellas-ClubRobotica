@@ -244,6 +244,21 @@ void UIModule::update() {
   bool clicked = g_buttonClicked; // Si se pulsó el botón
   g_buttonClicked = false;      // Reseteamos
   interrupts(); 
+
+  // Si hay Error Termico no usar Menu
+  extern TemperatureModule tempModule; 
+  TempError err = tempModule.getErrorState();
+  
+  if (err != TEMP_OK) {
+      // Dibujar pantalla de error
+      drawErrorScreen(err);
+
+      // Si el usuario presiona botón → reset
+      if (clicked) {
+        tempModule.resetError();  // Apaga error
+      }
+      return;  // Bloquea menu
+  }
   
   // 2. TRADUCIR A EVENTOS DE MENÚ
   MenuInput input = INPUT_NONE;
@@ -403,4 +418,44 @@ void UIModule::drawInfoScreen()
 void UIModule::showInfoScreen()
 {
     currentState = STATE_INFO_SCREEN;
+}
+
+void UIModule::drawErrorScreen(TempError err) {
+    u8g2.firstPage();
+    do {
+        u8g2.setFont(u8g2_font_6x10_tf);
+
+        u8g2.drawStr(0, 10, "! ERROR TERMICO !");
+
+        switch(err) {
+          case ERROR_HEATING_TIMEOUT:
+                // No se alcanzo la temperatura esperada en el tiempo límite
+                u8g2.drawStr(0, 25, "No calienta");
+                break;
+
+          case ERROR_OVERHEAT:
+              // Se supero el limite de temperatura segura
+              u8g2.drawStr(0, 25, "Sobrecalentamiento!");
+              break;
+
+          case ERROR_RUNAWAY:
+              // La temperatura no responde al control (posible fallo de PID o sensor)
+              u8g2.drawStr(0, 25, "Temp. fuera de control!");
+              break;
+
+          case ERROR_SENSOR_FAIL:
+              // El sensor está desconectado o dañado (lectura inválida)
+              u8g2.drawStr(0, 25, "Sensor desconectado");
+              break;
+
+          case TEMP_OK:
+          default:
+              // Este caso no debería ocurrir, pero se maneja por seguridad
+              u8g2.drawStr(0, 25, "Error desconocido");
+              break;
+
+        }
+
+        u8g2.drawStr(0, 45, "Presione boton");
+    } while (u8g2.nextPage());
 }

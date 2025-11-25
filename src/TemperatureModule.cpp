@@ -24,6 +24,12 @@ void TemperatureModule::init() {
   myPID.SetMode(AUTOMATIC);
   myPID.SetOutputLimits(0, 255); 
   myPID.SetSampleTime(PID_SAMPLE_TIME);
+
+  // Inicializando Seguridad
+  heatStartTime = millis();            // Inicia el contador de tiempo de calentamiento
+  lastTemp = 0;                        // Inicializa la temperatura anterior
+  lastTempChangeTime = millis();      // Marca el tiempo de último cambio de temperatura
+  errorState = TEMP_OK;               // Estado inicial sin errores
 }
 
 void TemperatureModule::setTargetTemp(int sp) {
@@ -76,10 +82,19 @@ void TemperatureModule::update() {
   
   // La librería decide si ya pasó el tiempo (PID_SAMPLE_TIME) para recalcular
   myPID.Compute(); 
+
+  // Aplicando seguridad de Temperatura
+  // Aplicar salida PWM solo si no hay error
+  if (errorState == TEMP_OK) {
+       // 4. APLICAR POTENCIA
+      // Lógica Normal: Mayor valor de salida PID (0-255) = Más voltaje al pin
+      analogWrite(TEMP_HEATER_PIN, (int)pidOutput);
+  }
+
+  // Revisar seguridad en cada ciclo
+  safetyCheck();
   
-  // 4. APLICAR POTENCIA
-  // Lógica Normal: Mayor valor de salida PID (0-255) = Más voltaje al pin
-  analogWrite(TEMP_HEATER_PIN, (int)pidOutput);
+ 
 }
 
 // --- Funciones de Configuración y EEPROM ---
@@ -127,4 +142,63 @@ void TemperatureModule::loadSettingsFromEEPROM() {
     }
     
     myPID.SetTunings(kp, ki, kd);
+}
+
+// Funciones de Seguridad Temperatura
+// Función principal de seguridad
+void TemperatureModule::safetyCheck() {
+  double currentTemp = pidInput;       // Temperatura actual leída del sensor
+  double target = pidSetpoint;         // Temperatura objetivo configurada
+
+  // --- 1. FALLO DE SENSOR ---
+  if (currentTemp < -5 || currentTemp > 260) {
+    errorState = ERROR_SENSOR_FAIL; // Lectura fuera de rango razonable
+
+  }
+
+  // --- 2. SOBRECALENTAMIENTO ---
+  if (currentTemp > target + 20) { 
+    errorState = ERROR_OVERHEAT; // Temperatura excede el objetivo por más de 20°C
+
+  }
+
+  // --- 3. TIMEOUT DE CALENTAMIENTO ---
+  if (target > 0) {
+    if (millis() - heatStartTime > 120000) { // Si pasaron mas de 120 segundos
+      if (currentTemp < target - 30) { // Y aun esta muy lejos del objetivo
+        errorState = ERROR_HEATING_TIMEOUT;
+      }
+    }
+  }
+
+  // --- 4. RUNAWAY (no sube la temperatura en mucho tiempo) ---
+  if (abs(currentTemp - lastTemp) > 1.0) {
+    lastTemp = currentTemp; // Actualiza si hubo cambio significativo
+    lastTempChangeTime = millis(); // Marca el tiempo del cambio
+
+  }
+
+  if (millis() - lastTempChangeTime > 30000) { // 30 s sin cambios
+    if (currentTemp < target - 10) {
+      errorState = ERROR_RUNAWAY;
+    }
+  }
+
+  // Si hay error  APAGAR TODO
+  if (errorState != TEMP_OK) {
+    analogWrite(TEMP_HEATER_PIN, 0);
+  }
+}
+
+//Funciones para obtener y resetear error
+TempError TemperatureModule::getError() {
+    return errorState; // Devuelve el estado actual de error
+
+}
+
+void TemperatureModule::resetError() {
+    errorState = TEMP_OK;                  // Limpia estado de error
+    heatStartTime = millis();              // Reinicia tiempo de calentamiento
+    lastTemp = pidInput;                   // Actualiza la temperatura base
+    lastTempChangeTime = millis();         // Reinicia tiempo de cambio
 }
